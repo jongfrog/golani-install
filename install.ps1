@@ -1,3 +1,4 @@
+
 # ==========================================
 # GOLANI INSTALLER
 # ==========================================
@@ -5,19 +6,51 @@
 $White = "White"
 $Gray = "DarkGray"
 
-# ------------------------------------------
-# 로고 출력
-# ------------------------------------------
+# ==========================================
+# 콘솔 상태 복구
+# ==========================================
+
+$OriginalForeground = [Console]::ForegroundColor
+$OriginalBackground = [Console]::BackgroundColor
+
+function Restore-Console {
+    try {
+        [Console]::ForegroundColor = $OriginalForeground
+        [Console]::BackgroundColor = $OriginalBackground
+        [Console]::CursorVisible = $true
+    }
+    catch {
+    }
+}
+
+# Ctrl+C 처리
+$global:GolaniInterrupted = $false
+
+$CancelHandler = {
+    $global:GolaniInterrupted = $true
+    [Console]::CancelKeyPressEventArgs
+}
+
+$ConsoleCancelHandler = [ConsoleCancelEventHandler] {
+    param($sender, $eventArgs)
+
+    $eventArgs.Cancel = $true
+    $global:GolaniInterrupted = $true
+}
+
+[Console]::add_CancelKeyPress($ConsoleCancelHandler)
+
+# ==========================================
+# 로고
+# ==========================================
 
 function Show-Banner {
 
-    Write-Host ""
-
     $logo = @'
 ░██████╗░░█████╗░██╗░░░░░░█████╗░███╗░░██╗██╗
-██╔════╝░██╔══██╗██║░░░░░██╔══██╗████╗░██║██║
+██╔════╝░██╔══██╗██║░░░░░██╔══██╗████╗░░██║██║
 ██║░░██╗░██║░░██║██║░░░░░███████║██╔██╗██║██║
-██║░░╚██╗██║░░██║██║░░░░░██╔══██╗██║╚████║██║
+██║░░╚██╗██║░░██║██║░░░░░██╔══██║██║╚████║██║
 ╚██████╔╝╚█████╔╝███████╗██║░░██║██║░╚███║██║
 ░╚═════╝░░╚════╝░╚══════╝╚═╝░░╚═╝╚═╝░░╚══╝╚═╝
 '@
@@ -25,9 +58,9 @@ function Show-Banner {
     Write-Host $logo -ForegroundColor $White
 }
 
-# ------------------------------------------
-# 메뉴 출력 및 조작
-# ------------------------------------------
+# ==========================================
+# 메뉴
+# ==========================================
 
 function Show-GolaniMenu {
 
@@ -42,10 +75,15 @@ function Show-GolaniMenu {
 
     while ($true) {
 
+        if ($global:GolaniInterrupted) {
+            return "Exit"
+        }
+
         Clear-Host
 
         Show-Banner
 
+        Write-Host ""
         Write-Host "  GOLANI INSTALLER" -ForegroundColor $White
         Write-Host "  Your personal installation manager" -ForegroundColor $Gray
 
@@ -56,96 +94,111 @@ function Show-GolaniMenu {
         for ($i = 0; $i -lt $options.Count; $i++) {
 
             if ($i -eq $selected) {
-
                 Write-Host ("  ❯  " + $options[$i]) -ForegroundColor $White
-
             }
             else {
-
                 Write-Host ("     " + $options[$i]) -ForegroundColor $Gray
-
             }
         }
 
         Write-Host ""
         Write-Host "  ↑ ↓  Navigate     ENTER  Select     ESC  Exit" -ForegroundColor $Gray
 
-        $key = [Console]::ReadKey($true)
+        try {
+            $key = [Console]::ReadKey($true)
+        }
+        catch {
+            return "Exit"
+        }
+
+        if ($global:GolaniInterrupted) {
+            return "Exit"
+        }
 
         switch ($key.Key) {
 
             "UpArrow" {
-
                 if ($selected -gt 0) {
                     $selected--
                 }
-
             }
 
             "DownArrow" {
-
                 if ($selected -lt ($options.Count - 1)) {
                     $selected++
                 }
-
             }
 
             "Enter" {
-
                 return $options[$selected]
-
             }
 
             "Escape" {
-
                 return "Exit"
-
             }
         }
     }
 }
 
-# ------------------------------------------
-# 프로그램 실행
-# ------------------------------------------
+# ==========================================
+# 실행
+# ==========================================
 
-$choice = Show-GolaniMenu
+try {
 
-Clear-Host
+    $choice = Show-GolaniMenu
 
-Show-Banner
-
-switch ($choice) {
-
-    "Install GOLANI" {
-
-        Write-Host "Starting GOLANI installation..." -ForegroundColor $White
-
-        # TODO: 기존 설치 코드 연결
-
+    if ($global:GolaniInterrupted) {
+        Write-Host ""
+        Write-Host "GOLANI installer closed." -ForegroundColor $Gray
+        exit 130
     }
 
-    "Update GOLANI" {
+    Clear-Host
 
-        Write-Host "Starting GOLANI update..." -ForegroundColor $White
+    Show-Banner
 
-        # TODO: 기존 업데이트 코드 연결
+    switch ($choice) {
 
+        "Install GOLANI" {
+
+            Write-Host ""
+            Write-Host "Starting GOLANI installation..." -ForegroundColor $White
+
+            # 설치 코드 연결 위치
+
+        }
+
+        "Update GOLANI" {
+
+            Write-Host ""
+            Write-Host "Starting GOLANI update..." -ForegroundColor $White
+
+            # 업데이트 코드 연결 위치
+
+        }
+
+        "Uninstall GOLANI" {
+
+            Write-Host ""
+            Write-Host "Starting GOLANI uninstall..." -ForegroundColor $White
+
+            # 삭제 코드 연결 위치
+
+        }
+
+        "Exit" {
+
+            Write-Host ""
+            Write-Host "Goodbye!" -ForegroundColor $Gray
+
+        }
     }
 
-    "Uninstall GOLANI" {
+}
+finally {
 
-        Write-Host "Starting GOLANI uninstall..." -ForegroundColor $White
+    [Console]::remove_CancelKeyPress($ConsoleCancelHandler)
+    Restore-Console
 
-        # TODO: 기존 삭제 코드 연결
-
-    }
-
-    "Exit" {
-
-        Write-Host "Goodbye!" -ForegroundColor $Gray
-
-        exit 0
-
-    }
 }
