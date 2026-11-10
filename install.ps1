@@ -3,6 +3,9 @@
 # GOLANI INSTALLER
 # ==========================================
 
+# UTF-8 출력 설정
+$OutputEncoding = [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+
 $White = "White"
 $Gray = "DarkGray"
 
@@ -19,17 +22,14 @@ function Restore-Console {
         [Console]::BackgroundColor = $OriginalBackground
         [Console]::CursorVisible = $true
     }
-    catch {
-    }
+    catch {}
 }
 
+# ==========================================
 # Ctrl+C 처리
-$global:GolaniInterrupted = $false
+# ==========================================
 
-$CancelHandler = {
-    $global:GolaniInterrupted = $true
-    [Console]::CancelKeyPressEventArgs
-}
+$global:GolaniInterrupted = $false
 
 $ConsoleCancelHandler = [ConsoleCancelEventHandler] {
     param($sender, $eventArgs)
@@ -94,7 +94,7 @@ function Show-GolaniMenu {
         for ($i = 0; $i -lt $options.Count; $i++) {
 
             if ($i -eq $selected) {
-                Write-Host ("  ❯  " + $options[$i]) -ForegroundColor $White
+                Write-Host ("  >  " + $options[$i]) -ForegroundColor $White
             }
             else {
                 Write-Host ("     " + $options[$i]) -ForegroundColor $Gray
@@ -102,7 +102,7 @@ function Show-GolaniMenu {
         }
 
         Write-Host ""
-        Write-Host "  ↑ ↓  Navigate     ENTER  Select     ESC  Exit" -ForegroundColor $Gray
+        Write-Host "  UP / DOWN  Navigate     ENTER  Select     ESC  Exit" -ForegroundColor $Gray
 
         try {
             $key = [Console]::ReadKey($true)
@@ -161,37 +161,29 @@ try {
     switch ($choice) {
 
         "Install GOLANI" {
-
             Write-Host ""
             Write-Host "Starting GOLANI installation..." -ForegroundColor $White
 
             # 설치 코드 연결 위치
-
         }
 
         "Update GOLANI" {
-
             Write-Host ""
             Write-Host "Starting GOLANI update..." -ForegroundColor $White
 
             # 업데이트 코드 연결 위치
-
         }
 
         "Uninstall GOLANI" {
-
             Write-Host ""
             Write-Host "Starting GOLANI uninstall..." -ForegroundColor $White
 
             # 삭제 코드 연결 위치
-
         }
 
         "Exit" {
-
             Write-Host ""
             Write-Host "Goodbye!" -ForegroundColor $Gray
-
         }
     }
 
