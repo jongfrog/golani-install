@@ -4,49 +4,20 @@
 # ==========================================
 
 # UTF-8 출력 설정
-$OutputEncoding = [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+$Utf8 = [System.Text.UTF8Encoding]::new($false)
+[Console]::OutputEncoding = $Utf8
+$OutputEncoding = $Utf8
 
+# 색상 설정
 $White = "White"
 $Gray = "DarkGray"
+$Reset = "White"
 
-# ==========================================
-# 콘솔 상태 복구
-# ==========================================
+# 콘솔 설정
+$Host.UI.RawUI.WindowTitle = "GOLANI INSTALLER"
 
-$OriginalForeground = [Console]::ForegroundColor
-$OriginalBackground = [Console]::BackgroundColor
-
-function Restore-Console {
-    try {
-        [Console]::ForegroundColor = $OriginalForeground
-        [Console]::BackgroundColor = $OriginalBackground
-        [Console]::CursorVisible = $true
-    }
-    catch {}
-}
-
-# ==========================================
-# Ctrl+C 처리
-# ==========================================
-
-$global:GolaniInterrupted = $false
-
-$ConsoleCancelHandler = [ConsoleCancelEventHandler] {
-    param($sender, $eventArgs)
-
-    $eventArgs.Cancel = $true
-    $global:GolaniInterrupted = $true
-}
-
-[Console]::add_CancelKeyPress($ConsoleCancelHandler)
-
-# ==========================================
 # 로고
-# ==========================================
-
-function Show-Banner {
-
-    $logo = @'
+$Logo = @'
 ░██████╗░░█████╗░██╗░░░░░░█████╗░███╗░░██╗██╗
 ██╔════╝░██╔══██╗██║░░░░░██╔══██╗████╗░░██║██║
 ██║░░██╗░██║░░██║██║░░░░░███████║██╔██╗██║██║
@@ -55,142 +26,140 @@ function Show-Banner {
 ░╚═════╝░░╚════╝░╚══════╝╚═╝░░╚═╝╚═╝░░╚══╝╚═╝
 '@
 
-    Write-Host $logo -ForegroundColor $White
+# 메뉴
+$MenuItems = @(
+    "Install GOLANI",
+    "Update GOLANI",
+    "Uninstall GOLANI",
+    "Exit"
+)
+
+$SelectedIndex = 0
+$Running = $true
+
+# 화면 출력
+function Show-Menu {
+    Clear-Host
+
+    Write-Host ""
+    Write-Host $Logo -ForegroundColor $White
+    Write-Host ""
+    Write-Host "  GOLANI INSTALLER" -ForegroundColor $White
+    Write-Host "  Your personal installation manager" -ForegroundColor $Gray
+    Write-Host ""
+    Write-Host "  Select an action:" -ForegroundColor $Gray
+    Write-Host ""
+
+    for ($i = 0; $i -lt $MenuItems.Count; $i++) {
+        if ($i -eq $SelectedIndex) {
+            Write-Host "  >  $($MenuItems[$i])" -ForegroundColor $White
+        }
+        else {
+            Write-Host "     $($MenuItems[$i])" -ForegroundColor $Gray
+        }
+    }
+
+    Write-Host ""
+    Write-Host "  UP / DOWN  Navigate     ENTER  Select     ESC  Exit" -ForegroundColor $Gray
+    Write-Host ""
 }
 
-# ==========================================
-# 메뉴
-# ==========================================
+# 종료
+function Exit-Installer {
+    Clear-Host
+    Write-Host ""
+    Write-Host "  Goodbye!" -ForegroundColor $Gray
+    Write-Host ""
+    exit
+}
 
-function Show-GolaniMenu {
+# 설치
+function Install-GOLANI {
+    Clear-Host
+    Write-Host ""
+    Write-Host "  INSTALL GOLANI" -ForegroundColor $White
+    Write-Host ""
 
-    $options = @(
-        "Install GOLANI"
-        "Update GOLANI"
-        "Uninstall GOLANI"
-        "Exit"
-    )
+    Write-Host "  Installation process is not configured yet." -ForegroundColor $Gray
+    Write-Host ""
+    Write-Host "  Press any key to return..." -ForegroundColor $Gray
 
-    $selected = 0
+    [Console]::ReadKey($true) | Out-Null
+}
 
-    while ($true) {
+# 업데이트
+function Update-GOLANI {
+    Clear-Host
+    Write-Host ""
+    Write-Host "  UPDATE GOLANI" -ForegroundColor $White
+    Write-Host ""
 
-        if ($global:GolaniInterrupted) {
-            return "Exit"
-        }
+    Write-Host "  Update process is not configured yet." -ForegroundColor $Gray
+    Write-Host ""
+    Write-Host "  Press any key to return..." -ForegroundColor $Gray
 
-        Clear-Host
+    [Console]::ReadKey($true) | Out-Null
+}
 
-        Show-Banner
+# 삭제
+function Uninstall-GOLANI {
+    Clear-Host
+    Write-Host ""
+    Write-Host "  UNINSTALL GOLANI" -ForegroundColor $White
+    Write-Host ""
 
-        Write-Host ""
-        Write-Host "  GOLANI INSTALLER" -ForegroundColor $White
-        Write-Host "  Your personal installation manager" -ForegroundColor $Gray
+    Write-Host "  Uninstall process is not configured yet." -ForegroundColor $Gray
+    Write-Host ""
+    Write-Host "  Press any key to return..." -ForegroundColor $Gray
 
-        Write-Host ""
-        Write-Host "  Select an action:"
-        Write-Host ""
+    [Console]::ReadKey($true) | Out-Null
+}
 
-        for ($i = 0; $i -lt $options.Count; $i++) {
+# 메인 메뉴
+try {
+    while ($Running) {
+        Show-Menu
 
-            if ($i -eq $selected) {
-                Write-Host ("  >  " + $options[$i]) -ForegroundColor $White
-            }
-            else {
-                Write-Host ("     " + $options[$i]) -ForegroundColor $Gray
-            }
-        }
+        $Key = [Console]::ReadKey($true)
 
-        Write-Host ""
-        Write-Host "  UP / DOWN  Navigate     ENTER  Select     ESC  Exit" -ForegroundColor $Gray
-
-        try {
-            $key = [Console]::ReadKey($true)
-        }
-        catch {
-            return "Exit"
-        }
-
-        if ($global:GolaniInterrupted) {
-            return "Exit"
-        }
-
-        switch ($key.Key) {
-
+        switch ($Key.Key) {
             "UpArrow" {
-                if ($selected -gt 0) {
-                    $selected--
+                $SelectedIndex--
+
+                if ($SelectedIndex -lt 0) {
+                    $SelectedIndex = $MenuItems.Count - 1
                 }
             }
 
             "DownArrow" {
-                if ($selected -lt ($options.Count - 1)) {
-                    $selected++
+                $SelectedIndex++
+
+                if ($SelectedIndex -ge $MenuItems.Count) {
+                    $SelectedIndex = 0
                 }
             }
 
             "Enter" {
-                return $options[$selected]
+                switch ($SelectedIndex) {
+                    0 { Install-GOLANI }
+                    1 { Update-GOLANI }
+                    2 { Uninstall-GOLANI }
+                    3 { Exit-Installer }
+                }
             }
 
             "Escape" {
-                return "Exit"
+                Exit-Installer
             }
         }
     }
 }
-
-# ==========================================
-# 실행
-# ==========================================
-
-try {
-
-    $choice = Show-GolaniMenu
-
-    if ($global:GolaniInterrupted) {
-        Write-Host ""
-        Write-Host "GOLANI installer closed." -ForegroundColor $Gray
-        exit 130
-    }
-
+catch {
     Clear-Host
-
-    Show-Banner
-
-    switch ($choice) {
-
-        "Install GOLANI" {
-            Write-Host ""
-            Write-Host "Starting GOLANI installation..." -ForegroundColor $White
-
-            # 설치 코드 연결 위치
-        }
-
-        "Update GOLANI" {
-            Write-Host ""
-            Write-Host "Starting GOLANI update..." -ForegroundColor $White
-
-            # 업데이트 코드 연결 위치
-        }
-
-        "Uninstall GOLANI" {
-            Write-Host ""
-            Write-Host "Starting GOLANI uninstall..." -ForegroundColor $White
-
-            # 삭제 코드 연결 위치
-        }
-
-        "Exit" {
-            Write-Host ""
-            Write-Host "Goodbye!" -ForegroundColor $Gray
-        }
-    }
-
+    Write-Host ""
+    Write-Host "  Installer stopped." -ForegroundColor $Gray
+    Write-Host ""
 }
 finally {
-
-    [Console]::remove_CancelKeyPress($ConsoleCancelHandler)
-    Restore-Console
-
+    [Console]::OutputEncoding = $Utf8
 }
