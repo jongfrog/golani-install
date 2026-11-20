@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>golani - Minecraft 서버 관리자</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #1a1a2e; color: #eee; min-height: 100vh; }
+header { background: #16213e; padding: 1rem 2rem; border-bottom: 1px solid #0f3460; display: flex; justify-content: space-between; align-items: center; }
+header h1 { color: #e94560; font-size: 1.5rem; }
+.header-right { display: flex; gap: 1rem; align-items: center; }
+.btn { padding: 0.5rem 1rem; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9rem; transition: all 0.2s; }
+.btn-primary { background: #e94560; color: white; }
+.btn-primary:hover { background: #d63a55; }
+.btn-secondary { background: #0f3460; color: #eee; border: 1px solid #16213e; }
+.btn-secondary:hover { background: #16213e; }
+.btn-danger { background: #e94560; color: white; }
+.btn-danger:hover { background: #d63a55; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.container { display: flex; height: calc(100vh - 70px); }
+.sidebar { width: 300px; background: #16213e; border-right: 1px solid #0f3460; display: flex; flex-direction: column; overflow-y: auto; }
+.sidebar-header { padding: 1rem; border-bottom: 1px solid #0f3460; }
+.server-list { flex: 1; overflow-y: auto; }
+.server-item { padding: 1rem; border-bottom: 1px solid #0f3460; cursor: pointer; transition: background 0.2s; }
+.server-item:hover { background: #0f3460; }
+.server-item.active { background: #0f3460; border-left: 3px solid #e94560; }
+.server-name { font-weight: 600; margin-bottom: 0.25rem; }
+.server-meta { font-size: 0.8rem; color: #aaa; display: flex; gap: 1rem; flex-wrap: wrap; }
+.status-badge { display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.75rem; padding: 0.15rem 0.5rem; border-radius: 999px; }
+.status-badge.running { background: #0f3460; color: #4ade80; }
+.status-badge.stopped { background: #0f3460; color: #94a3b8; }
+.status-badge.needs-restart { background: #0f3460; color: #fbbf24; }
+.main-content { flex: 1; padding: 2rem; overflow-y: auto; }
+.welcome { text-align: center; padding: 3rem; color: #666; }
+.welcome h2 { color: #e94560; margin-bottom: 1rem; }
+.server-detail { display: none; }
+.server-detail.active { display: block; animation: fadeIn 0.2s; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+.detail-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; padding-bottom: 1rem; border-bottom: 1px solid #0f3460; }
+.detail-title { font-size: 1.5rem; }
+.detail-meta { display: flex; gap: 2rem; color: #888; font-size: 0.9rem; }
+.detail-actions { display: flex; gap: 0.5rem; }
+.detail-tabs { display: flex; gap: 0.5rem; margin-bottom: 1rem; border-bottom: 1px solid #0f3460; padding-bottom: 0.5rem; }
+.tab-btn { padding: 0.5rem 1rem; background: none; border: none; color: #888; cursor: pointer; border-radius: 4px; transition: all 0.2s; }
+.tab-btn:hover { color: #eee; background: #0f3460; }
+.tab-btn.active { color: #e94560; border-bottom: 2px solid #e94560; }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+.info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
+.info-card { background: #16213e; padding: 1rem; border-radius: 8px; border: 1px solid #0f3460; }
+.info-card h4 { color: #888; font-size: 0.8rem; margin-bottom: 0.5rem; text-transform: uppercase; }
+.info-card p { font-size: 1.1rem; font-weight: 500; }
+.properties-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.properties-table th, .properties-table td { padding: 0.75rem; text-align: left; border-bottom: 1px solid #0f3460; }
+.properties-table th { color: #888; font-weight: 500; width: 30%; }
+.logs-container { background: #0f0f1a; border-radius: 8px; padding: 1rem; font-family: monospace; font-size: 0.85rem; max-height: 500px; overflow-y: auto; border: 1px solid #0f3460; }
+.log-line { padding: 0.25rem 0; border-bottom: 1px solid #1a1a2e; white-space: pre-wrap; word-break: break-all; }
+.log-line.error { color: #f87171; }
+.log-line.warn { color: #fbbf24; }
+.log-line.info { color: #60a5fa; }
+.log-filters { display: flex; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; }
+.log-filters input, .log-filters select { padding: 0.5rem; border: 1px solid #0f3460; background: #16213e; color: #eee; border-radius: 4px; }
+.console-container { background: #0f0f1a; border-radius: 8px; height: 500px; display: flex; flex-direction: column; border: 1px solid #0f3460; }
+.console-output { flex: 1; overflow-y: auto; padding: 1rem; font-family: monospace; font-size: 0.85rem; }
+.console-line { margin-bottom: 0.25rem; white-space: pre-wrap; word-break: break-all; }
+.console-line.command { color: #4ade80; }
+.console-line.output { color: #eee; }
+.console-input-area { display: flex; gap: 0.5rem; padding: 1rem; border-top: 1px solid #0f3460; }
+.console-input-area input { flex: 1; padding: 0.5rem; border: 1px solid #0f3460; background: #16213e; color: #eee; border-radius: 4px; }
+.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 1000; display: none; }
+.modal-overlay.active { display: flex; }
+.modal { background: #16213e; padding: 2rem; border-radius: 12px; border: 1px solid #0f3460; max-width: 500px; width: 90%; }
+.modal h3 { color: #e94560; margin-bottom: 1rem; }
+.modal p { color: #ccc; margin-bottom: 1.5rem; }
+.modal-actions { display: flex; gap: 0.5rem; justify-content: flex-end; }
+.create-wizard { max-width: 600px; }
+.wizard-steps { display: flex; justify-content: space-between; margin-bottom: 2rem; position: relative; }
+.wizard-steps::before { content: ''; position: absolute; top: 50%; left: 0; right: 0; height: 2px; background: #0f3460; transform: translateY(-50%); z-index: 1; }
+.wizard-step { display: flex; flex-direction: column; align-items: center; position: relative; z-index: 2; flex: 1; }
+.wizard-step-circle { width: 32px; height: 32px; border-radius: 50%; background: #0f3460; border: 2px solid #0f3460; display: flex; align-items: center; justify-content: center; color: #888; font-weight: 600; transition: all 0.3s; }
+.wizard-step.active .wizard-step-circle { background: #e94560; border-color: #e94560; color: white; }
+.wizard-step.completed .wizard-step-circle { background: #4ade80; border-color: #4ade80; color: white; }
+.wizard-step-label { margin-top: 0.5rem; font-size: 0.75rem; color: #888; text-align: center; }
+.wizard-step.active .wizard-step-label { color: #e94560; }
+.wizard-content { display: none; }
+.wizard-content.active { display: block; animation: fadeIn 0.3s; }
+.form-group { margin-bottom: 1rem; }
+.form-group label { display: block; margin-bottom: 0.5rem; font-weight: 500; }
+.form-group input, .form-group select { width: 100%; padding: 0.75rem; border: 1px solid #0f3460; background: #16213e; color: #eee; border-radius: 6px; font-size: 1rem; }
+.form-group input:focus, .form-group select:focus { outline: none; border-color: #e94560; }
+.form-group small { display: block; margin-top: 0.25rem; color: #888; font-size: 0.8rem; }
+.form-group small.warning { color: #fbbf24; }
+.wizard-actions { display: flex; justify-content: space-between; margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #0f3460; }
+.toast { position: fixed; bottom: 2rem; right: 2rem; padding: 1rem 1.5rem; border-radius: 8px; background: #16213e; border: 1px solid #0f3460; color: #eee; z-index: 2000; animation: slideIn 0.3s; display: none; }
+.toast.active { display: block; }
+.toast.success { border-color: #4ade80; }
+.toast.error { border-color: #f87171; }
+@keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+</style>
+</head>
+<body>
+<header>
+<h1>GOLANI</h1>
+<div class="header-right">
+<button class="btn btn-primary" onclick="openCreateWizard()">+ 새 서버</button>
+</div>
+</header>
+<div class="container">
+<aside class="sidebar">
+<div class="sidebar-header">
+<h3 style="color:#e94560">서버 목록</h3>
+</div>
+<div class="server-list" id="serverList">
+<div class="welcome" style="padding:2rem;text-align:center;color:#666">서버가 없습니다.<br><small>"새 서버" 버튼으로 생성하세요</small></div>
+</div>
+</aside>
+<main class="main-content">
+<div class="welcome" id="welcomeScreen">
+<h2>서버를 선택하거나 새로 생성하세요</h2>
+<p style="color:#666">좌측 사이드바에서 서버를 선택하거나 "새 서버" 버튼을 클릭하세요.</p>
+</div>
+<div class="server-detail" id="serverDetail">
+<div class="detail-header">
+<div>
+<div class="detail-title" id="detailName"></div>
+<div class="detail-meta" id="detailMeta"></div>
+</div>
+<div class="detail-actions" id="detailActions"></div>
+</div>
+<div class="detail-tabs">
+<button class="tab-btn active" data-tab="dashboard">대시보드</button>
+<button class="tab-btn" data-tab="console">콘솔</button>
+<button class="tab-btn" data-tab="logs">로그</button>
+<button class="tab-btn" data-tab="properties">속성</button>
+</div>
+<div class="tab-panel active" id="tab-dashboard">
+<div class="info-grid" id="dashboardGrid"></div>
+</div>
+<div class="tab-panel" id="tab-console">
+<div class="console-container">
+<div class="console-output" id="consoleOutput"></div>
+<div class="console-input-area">
+<input type="text" id="consoleInput" placeholder="명령어를 입력하세요 (exit로 종료)" autocomplete="off">
+<button class="btn btn-primary" onclick="sendConsoleCommand()">전송</button>
+</div>
+</div>
+</div>
+<div class="tab-panel" id="tab-logs">
+<div class="log-filters">
+<input type="text" id="logFilter" placeholder="필터 (ERROR, WARN 등)" oninput="loadLogs()">
+<select id="logLines" onchange="loadLogs()">
+<option value="100">100줄</option>
+<option value="500" selected>500줄</option>
+<option value="1000">1000줄</option>
+<option value="2000">2000줄</option>
+</select>
+<label><input type="checkbox" id="logFollow" onchange="toggleLogFollow()"> 실시간 팔로우</label>
+<button class="btn btn-secondary" onclick="loadLogs()">새로고침</button>
+</div>
+<div class="logs-container" id="logsContainer"></div>
+</div>
+<div class="tab-panel" id="tab-properties">
+<table class="properties-table" id="propertiesTable"><thead><tr><th>키</th><th>값</th></tr></thead><tbody></tbody></table>
+</div>
+</div>
+</main>
+</div>
+<div class="modal-overlay" id="deleteModal">
+<div class="modal">
+<h3>서버 삭제 확인</h3>
+<p id="deleteModalMsg"></p>
+<div class="modal-actions">
+<button class="btn btn-secondary" onclick="closeDeleteModal()">취소</button>
+<button class="btn btn-danger" onclick="confirmDelete()">삭제</button>
+</div>
+</div>
+</div>
+<div class="modal-overlay" id="createWizardModal">
+<div class="modal" style="max-width:700px">
+<h3>새 서버 생성 마법사</h3>
+<div class="wizard-steps" id="wizardSteps"></div>
+<div class="wizard-content active" id="wizardStep1">
+<div class="form-group">
+<label>서버 이름</label>
+<input type="text" id="wizardName" placeholder="영문, 숫자, 하이픈, 밑줄만 사용">
+<small>나중에 변경 가능합니다</small>
+</div>
+</div>
+<div class="wizard-content" id="wizardStep2">
+<div class="form-group">
+<label>서버 종류</label>
+<select id="wizardKind">
+<option value="paper">Paper (권장)</option>
+<option value="vanilla">Vanilla</option>
+</select>
+</div>
+<div class="form-group">
+<label>마인크래프트 버전</label>
+<select id="wizardVersion"></select>
+</div>
+</div>
+<div class="wizard-content" id="wizardStep3">
+<div class="form-group">
+<label>저장 위치</label>
+<input type="text" id="wizardLocation" readonly>
+<small id="locationWarning"></small>
+</div>
+</div>
+<div class="wizard-content" id="wizardStep4">
+<div class="form-group">
+<label>RAM 할당 (MB)</label>
+<input type="number" id="wizardRam" min="512" max="8192" value="2048">
+<small>시스템 RAM의 절반 권장, 최대 8GB</small>
+</div>
+</div>
+<div class="wizard-content" id="wizardStep5">
+<div class="form-group">
+<label>서버 포트</label>
+<input type="number" id="wizardPort" min="1" max="65535" value="25565">
+<small>사용 중이면 다음 사용 가능 포트 제안</small>
+</div>
+</div>
+<div class="wizard-content" id="wizardStep6">
+<div class="form-group">
+<label>게임 모드</label>
+<select id="wizardGameMode">
+<option value="survival">Survival</option>
+<option value="creative">Creative</option>
+<option value="adventure">Adventure</option>
+<option value="spectator">Spectator</option>
+</select>
+</div>
+<div class="form-group">
+<label>난이도</label>
+<select id="wizardDifficulty">
+<option value="peaceful">Peaceful</option>
+<option value="easy">Easy</option>
+<option value="normal">Normal</option>
+<option value="hard">Hard</option>
+</select>
+</div>
+<div class="form-group">
+<label>시드 (비우면 랜덤)</label>
+<input type="text" id="wizardSeed" placeholder="랜덤 시드 사용">
+</div>
+<div class="form-group">
+<label>MOTD</label>
+<input type="text" id="wizardMotd" value="golani Minecraft Server">
+</div>
+</div>
+<div class="wizard-content" id="wizardStep7">
+<div id="wizardConfirmContent"></div>
+</div>
+<div class="wizard-actions">
+<button class="btn btn-secondary" onclick="prevWizardStep()" id="wizardPrev">이전</button>
+<div style="display:flex;gap:0.5rem">
+<button class="btn btn-primary" onclick="nextWizardStep()" id="wizardNext">다음</button>
+<button class="btn btn-primary" onclick="createServerFromWizard()" id="wizardCreate" style="display:none">생성</button>
+<button class="btn btn-secondary" onclick="closeCreateWizard()">취소</button>
+</div>
+</div>
+</div>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+let currentServer = null;
+let selectedServerEl = null;
+let logFollowInterval = null;
+let consoleWs = null;
+let logsWs = null;
+let wizardStep = 1;
+let vanillaVersions = [];
+let paperVersions = [];
+
+async function loadServers() {
+try {
+const res = await fetch('/api/servers');
+const servers = await res.json();
+const list = document.getElementById('serverList');
+if (servers.length === 0) {
+list.innerHTML = '<div class="welcome" style="padding:2rem;text-align:center;color:#666">서버가 없습니다.<br><small>"새 서버" 버튼으로 생성하세요</small></div>';
+return;
+}
+list.innerHTML = servers.map(s => `
+<div class="server-item ${currentServer?.name === s.name ? 'active' : ''}" data-name="${s.name}" onclick="selectServer('${s.name}')">
+<div class="server-name">${s.name} ${s.needs_restart ? '<span class="status-badge needs-restart">↑ 재시작필요</span>' : ''}</div>
+<div class="server-meta">
+<span class="status-badge ${s.running ? 'running' : 'stopped'}">${s.running ? '● 실행 중' : '○ 정지'}</span>
+<span>${s.kind} ${s.version}</span>
+<span>${s.ram_mb}MB</span>
+<span>:${s.port}</span>
+</div>
+</div>
+`).join('');
+} catch (e) {
+console.error(e);
+}
+}
+
+async function selectServer(name) {
+currentServer = name;
+document.querySelectorAll('.server-item').forEach(el => {
+el.classList.toggle('active', el.dataset.name === name);
+});
+document.getElementById('welcomeScreen').style.display = 'none';
+document.getElementById('serverDetail').classList.add('active');
+await loadServerDetail(name);
+}
+
+async function loadServerDetail(name) {
+try {
+const res = await fetch(`/api/servers/${encodeURIComponent(name)}`);
+if (!res.ok) throw new Error('서버 정보를 불러올 수 없습니다');
+const s = await res.json();
+document.getElementById('detailName').textContent = s.name;
+document.getElementById('detailMeta').innerHTML = `
+<span>${s.kind} ${s.version}</span>
+<span>${s.ram_mb}MB RAM</span>
+<span>포트: ${s.port}</span>
+<span>Java ${s.java_version}</span>
+${s.needs_restart ? '<span style="color:#fbbf24">↑ 재시작 필요</span>' : ''}
+`;
+const actions = document.getElementById('detailActions');
+actions.innerHTML = `
+${s.running ? `<button class="btn btn-secondary" onclick="serverAction('${name}','stop')">중지</button>` : `<button class="btn btn-primary" onclick="serverAction('${name}','start')">시작</button>`}
+<button class="btn btn-secondary" onclick="serverAction('${name}','restart')">재시작</button>
+<button class="btn btn-secondary" onclick="serverAction('${name}','update')">업데이트</button>
+<button class="btn btn-danger" onclick="openDeleteModal('${name}')">삭제</button>
+`;
+document.querySelectorAll('.tab-btn').forEach(btn => {
+btn.classList.toggle('active', btn.dataset.tab === 'dashboard');
+});
+document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-dashboard'));
+await loadDashboard(s);
+} catch (e) {
+console.error(e);
+showToast('서버 정보 로드 실패: ' + e.message, 'error');
+}
+}
+
+async function loadDashboard(s) {
+const grid = document.getElementById('dashboardGrid');
+const formatTime = (ts) => ts ? new Date(ts * 1000).toLocaleString() : '-';
+grid.innerHTML = `
+<div class="info-card"><h4>서버 종류</h4><p>${s.kind}</p></div>
+<div class="info-card"><h4>마인크래프트 버전</h4><p>${s.version}${s.paper_build ? ' (빌드 ' + s.paper_build + ')' : ''}</p></div>
+<div class="info-card"><h4>RAM</h4><p>${s.ram_mb} MB</p></div>
+<div class="info-card"><h4>포트</h4><p>${s.port} (RCON: ${s.rcon_port})</p></div>
+<div class="info-card"><h4>Java 버전</h4><p>Java ${s.java_version}</p></div>
+<div class="info-card"><h4>생성일</h4><p>${formatTime(s.created_at)}</p></div>
+<div class="info-card"><h4>마지막 시작</h4><p>${formatTime(s.last_started_at)}</p></div>
+<div class="info-card"><h4>상태</h4><p>${s.running ? '실행 중' : '정지'}${s.needs_restart ? ' (재시작 필요)' : ''}</p></div>
+`;
+document.getElementById('propertiesTable').querySelector('tbody').innerHTML = Object.entries(s.properties).map(([k,v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
+}
+
+function switchTab(tab) {
+document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
+document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + tab));
+if (tab === 'console' && currentServer) connectConsole();
+if (tab === 'logs' && currentServer) loadLogs();
+if (tab === 'dashboard' && currentServer) loadServerDetail(currentServer);
+}
+
+async function serverAction(name, action) {
+const btn = event.target;
+btn.disabled = true;
+try {
+let res;
+if (action === 'update') {
+res = await fetch(`/api/servers/${encodeURIComponent(name)}/update`, {method:'POST'});
+} else {
+res = await fetch(`/api/servers/${encodeURIComponent(name)}/${action}`, {method:'POST'});
+}
+if (res.ok) {
+showToast(`서버 ${action === 'start' ? '시작' : action === 'stop' ? '중지' : action === 'restart' ? '재시작' : '업데이트'} 완료`, 'success');
+setTimeout(() => loadServerDetail(name), 1000);
+} else {
+const err = await res.text();
+showToast('실패: ' + err, 'error');
+}
+} catch (e) {
+showToast('오류: ' + e.message, 'error');
+}
+btn.disabled = false;
+}
+
+function openDeleteModal(name) {
+document.getElementById('deleteModalMsg').textContent = `정말 '${name}' 서버를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.`;
+document.getElementById('deleteModal').dataset.name = name;
+document.getElementById('deleteModal').classList.add('active');
+}
+
+function closeDeleteModal() {
+document.getElementById('deleteModal').classList.remove('active');
+}
+
+async function confirmDelete() {
+const name = document.getElementById('deleteModal').dataset.name;
+closeDeleteModal();
+try {
+const res = await fetch(`/api/servers/${encodeURIComponent(name)}/delete`, {
+method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({confirm:'삭제'})
+});
+if (res.ok) {
+showToast('서버가 삭제되었습니다', 'success');
+currentServer = null;
+document.getElementById('serverDetail').classList.remove('active');
+document.getElementById('welcomeScreen').style.display = 'block';
+loadServers();
+} else {
+const err = await res.text();
+showToast('삭제 실패: ' + err, 'error');
+}
+} catch (e) {
+showToast('오류: ' + e.message, 'error');
+}
+}
+
+// Console WebSocket
+function connectConsole() {
+if (consoleWs) { consoleWs.close(); consoleWs = null; }
+consoleWs = new WebSocket(`ws://${location.host}/api/servers/${encodeURIComponent(currentServer)}/console/ws`);
+const output = document.getElementById('consoleOutput');
+output.innerHTML = '';
+consoleWs.onmessage = (e) => {
+const line = document.createElement('div');
+line.className = 'console-line output';
+line.textContent = e.data;
+output.appendChild(line);
+output.scrollTop = output.scrollHeight;
+};
+consoleWs.onclose = () => { consoleWs = null; };
+document.getElementById('consoleInput').focus();
+}
+
+function sendConsoleCommand() {
+const input = document.getElementById('consoleInput');
+const cmd = input.value.trim();
+if (!cmd || !consoleWs) return;
+const line = document.createElement('div');
+line.className = 'console-line command';
+line.textContent = '> ' + cmd;
+document.getElementById('consoleOutput').appendChild(line);
+consoleWs.send(cmd);
+input.value = '';
+}
+
+async function loadLogs() {
+if (!currentServer) return;
+const lines = document.getElementById('logLines').value;
+const filter = document.getElementById('logFilter').value;
+try {
+const res = await fetch(`/api/servers/${encodeURIComponent(currentServer)}/logs?lines=${lines}&filter=${encodeURIComponent(filter)}`);
+const logs = await res.json();
+const container = document.getElementById('logsContainer');
+container.innerHTML = logs.map(l => {
+let cls = 'log-line';
+if (l.toLowerCase().includes('error')) cls += ' error';
+else if (l.toLowerCase().includes('warn')) cls += ' warn';
+else if (l.toLowerCase().includes('info')) cls += ' info';
+return `<div class="${cls}">${escapeHtml(l)}</div>`;
+}).join('');
+container.scrollTop = container.scrollHeight;
+} catch (e) {
+console.error(e);
+}
+}
+
+function toggleLogFollow() {
+const follow = document.getElementById('logFollow').checked;
+if (follow) {
+if (logsWs) { logsWs.close(); }
+logsWs = new WebSocket(`ws://${location.host}/api/servers/${encodeURIComponent(currentServer)}/logs/ws`);
+logsWs.onmessage = (e) => {
+const container = document.getElementById('logsContainer');
+const line = document.createElement('div');
+line.className = 'log-line';
+line.textContent = e.data;
+container.appendChild(line);
+container.scrollTop = container.scrollHeight;
+};
+} else {
+if (logsWs) { logsWs.close(); logsWs = null; }
+}
+}
+
+function escapeHtml(text) {
+const div = document.createElement('div');
+div.textContent = text;
+return div.innerHTML;
+}
+
+function showToast(msg, type) {
+const toast = document.getElementById('toast');
+toast.textContent = msg;
+toast.className = 'toast active ' + (type || '');
+setTimeout(() => toast.classList.remove('active'), 3000);
+}
+
+// Create Wizard
+function openCreateWizard() {
+wizardStep = 1;
+document.getElementById('createWizardModal').classList.add('active');
+updateWizardUI();
+loadVersions();
+fetchNextPort();
+}
+
+function closeCreateWizard() {
+document.getElementById('createWizardModal').classList.remove('active');
+document.getElementById('wizardName').value = '';
+document.getElementById('wizardSeed').value = '';
+document.getElementById('wizardRam').value = 2048;
+document.getElementById('wizardPort').value = 25565;
+document.getElementById('wizardGameMode').value = 'survival';
+document.getElementById('wizardDifficulty').value = 'easy';
+document.getElementById('wizardMotd').value = 'golani Minecraft Server';
+}
+
+function updateWizardUI() {
+document.querySelectorAll('.wizard-step').forEach((el, i) => {
+el.classList.toggle('active', i+1 === wizardStep);
+el.classList.toggle('completed', i+1 < wizardStep);
+});
+document.querySelectorAll('.wizard-content').forEach((el, i) => {
+el.classList.toggle('active', i+1 === wizardStep);
+});
+document.getElementById('wizardPrev').style.display = wizardStep === 1 ? 'none' : 'inline-block';
+document.getElementById('wizardNext').style.display = wizardStep === 7 ? 'none' : 'inline-block';
+document.getElementById('wizardCreate').style.display = wizardStep === 7 ? 'inline-block' : 'none';
+if (wizardStep === 7) renderConfirmStep();
+}
+
+function nextWizardStep() {
+if (!validateWizardStep()) return;
+wizardStep++;
+updateWizardUI();
+}
+
+function prevWizardStep() {
+wizardStep--;
+updateWizardUI();
+}
+
+function validateWizardStep() {
+switch(wizardStep) {
+case 1:
+const name = document.getElementById('wizardName').value.trim();
+if (!name) { showToast('서버 이름을 입력하세요', 'error'); return false; }
+if (!/^[a-zA-Z0-9_-]+$/.test(name)) { showToast('영문, 숫자, 하이픈, 밑줄만 사용 가능', 'error'); return false; }
+return true;
+case 2:
+if (!document.getElementById('wizardVersion').value) { showToast('버전을 선택하세요', 'error'); return false; }
+return true;
+case 3:
+return true;
+case 4:
+const ram = parseInt(document.getElementById('wizardRam').value);
+if (ram < 512 || ram > 8192) { showToast('RAM은 512~8192MB 사이여야 합니다', 'error'); return false; }
+return true;
+case 5:
+const port = parseInt(document.getElementById('wizardPort').value);
+if (port < 1 || port > 65535) { showToast('포트는 1~65535 사이여야 합니다', 'error'); return false; }
+return true;
+case 6:
+return true;
+case 7:
+return true;
+}
+return true;
+}
+
+function renderConfirmStep() {
+const kind = document.getElementById('wizardKind').value;
+const kindLabel = kind === 'paper' ? 'Paper (권장)' : 'Vanilla';
+const warn = document.getElementById('locationWarning').textContent;
+document.getElementById('wizardConfirmContent').innerHTML = `
+<div style="background:#16213e;padding:1rem;border-radius:8px;border:1px solid #0f3460">
+<p><strong>이름:</strong> ${document.getElementById('wizardName').value}</p>
+<p><strong>종류:</strong> ${kindLabel}</p>
+<p><strong>버전:</strong> ${document.getElementById('wizardVersion').value}</p>
+<p><strong>위치:</strong> ${document.getElementById('wizardLocation').value} ${warn ? '<span style="color:#fbbf24"> ⚠ ' + warn + '</span>' : ''}</p>
+<p><strong>RAM:</strong> ${document.getElementById('wizardRam').value} MB</p>
+<p><strong>포트:</strong> ${document.getElementById('wizardPort').value}</p>
+<p><strong>게임 모드:</strong> ${document.getElementById('wizardGameMode').value}</p>
+<p><strong>난이도:</strong> ${document.getElementById('wizardDifficulty').value}</p>
+<p><strong>시드:</strong> ${document.getElementById('wizardSeed').value || '(랜덤)'}</p>
+<p><strong>MOTD:</strong> ${document.getElementById('wizardMotd').value}</p>
+</div>
+`;
+}
+
+async function createServerFromWizard() {
+const params = {
+name: document.getElementById('wizardName').value.trim(),
+kind: document.getElementById('wizardKind').value,
+version: document.getElementById('wizardVersion').value,
+ram_mb: parseInt(document.getElementById('wizardRam').value),
+port: parseInt(document.getElementById('wizardPort').value),
+game_mode: document.getElementById('wizardGameMode').value,
+difficulty: document.getElementById('wizardDifficulty').value,
+seed: document.getElementById('wizardSeed').value.trim() || null,
+motd: document.getElementById('wizardMotd').value.trim()
+};
+const btn = document.getElementById('wizardCreate');
+btn.disabled = true;
+btn.textContent = '생성 중...';
+try {
+const res = await fetch('/api/servers/create', {
+method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(params)
+});
+const data = await res.json();
+if (res.ok) {
+showToast('서버가 생성되었습니다!', 'success');
+closeCreateWizard();
+await loadServers();
+selectServer(data.name);
+} else {
+showToast('생성 실패: ' + (data.message || '알 수 없는 오류'), 'error');
+}
+} catch (e) {
+showToast('오류: ' + e.message, 'error');
+}
+btn.disabled = false;
+btn.textContent = '생성';
+}
+
+async function loadVersions() {
+try {
+const [vRes, pRes] = await Promise.all([fetch('/api/versions/vanilla'), fetch('/api/versions/paper')]);
+vanillaVersions = await vRes.json();
+paperVersions = await pRes.json();
+updateVersionSelect();
+} catch (e) {
+console.error(e);
+}
+}
+
+function updateVersionSelect() {
+const kind = document.getElementById('wizardKind').value;
+const versions = kind === 'paper' ? paperVersions : vanillaVersions;
+const select = document.getElementById('wizardVersion');
+select.innerHTML = versions.map(v => `<option value="${v}">${v}</option>`).join('');
+if (versions.includes('1.21.4')) select.value = '1.21.4';
+}
+
+async function fetchNextPort() {
+try {
+const res = await fetch('/api/ports/next');
+const data = await res.json();
+document.getElementById('wizardPort').value = data.port;
+} catch (e) {
+document.getElementById('wizardPort').value = 25565;
+}
+}
+
+document.getElementById('wizardKind').addEventListener('change', () => {
+updateVersionSelect();
+document.getElementById('wizardVersion').dispatchEvent(new Event('change'));
+});
+
+// Location warning
+document.getElementById('wizardLocation').addEventListener('input', () => {
+const path = document.getElementById('wizardLocation').value.toLowerCase();
+let warn = '';
+if (path.includes('downloads')) warn = 'Downloads 폴더는 권장되지 않습니다';
+else if (path.includes('desktop')) warn = 'Desktop 폴더는 권장되지 않습니다';
+else if (path.includes('onedrive')) warn = 'OneDrive 동기화 폴더는 권장되지 않습니다';
+document.getElementById('locationWarning').textContent = warn;
+});
+
+// Initial location
+document.getElementById('wizardLocation').value = '~/.golani/servers';
+
+// Keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+if (e.key === 'Escape') {
+closeDeleteModal();
+closeCreateWizard();
+}
+if (e.target.id === 'consoleInput' && e.key === 'Enter') {
+sendConsoleCommand();
+}
+if (e.target.id === 'wizardName' && e.key === 'Enter') {
+nextWizardStep();
+}
+});
+
+// Tab switching
+document.querySelectorAll('.tab-btn').forEach(btn => {
+btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+});
+
+// Initialize
+loadServers();
+setInterval(loadServers, 5000);
+</script>
+</body>
+</html>

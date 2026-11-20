@@ -1,0 +1,359 @@
+# golani GitHub 업로드 및 릴리스 가이드 (up.txt)
+
+## 1. 사전 준비
+
+### GitHub 저장소 생성
+1. https://github.com/new 접속
+2. Repository name: `golani`
+3. Description: `Minecraft Java Edition 서버 관리 도구 (TUI + Web UI)`
+3. Public 선택 (Private도 가능)
+4. **README, .gitignore, License 체크 해제** (로컬에 이미 있음)
+4. Create repository 클릭
+
+---
+
+## 2. 로컬 Git 설정 및 푸시 (PowerShell 관리자 권장)
+
+```powershell
+cd C:\Users\kfopb\Desktop\마크서버
+
+# Git 초기화 (이미 되어있다면 스킵)
+git init
+
+# .gitignore 생성
+@"
+/target/
+**/*.rs.bk
+Cargo.lock
+*.exe
+dist/
+*.log
+"@ | Out-File -Encoding utf8 .gitignore
+
+# 최초 커밋
+git add .
+git commit -m "feat: golani v0.1.0 - Minecraft 서버 관리 도구 초기 릴리스
+
+- Vanilla/Paper 서버 생성 (7단계 마법사)
+- TUI/Web UI로 서버 관리 (시작/중지/재시작/콘솔/로그)
+- RCON 실시간 콘솔 (히스토리, ESC 분리)
+- Java 자동 설치 (Temurin) 및 수동 경로 지정
+- 서버 업데이트 (자동 롤백) 및 삭제 (2단계 확인)
+- 설정 마이그레이션 (저장 위치 변경, Java 경로)
+- 방화벽 자동 관리 (Windows Defender/UFW/firewalld)
+- Web UI (대시보드, 실시간 로그/콘솔 WebSocket)
+- 크로스 플랫폼 (Windows/Linux/macOS)
+- 설치 스크립트 (install.sh/install.ps1)
+- 자체 업데이트 (golani update)
+"
+
+# 원격 저장소 연결 (본인 GitHub 계정으로 변경)
+git remote add origin https://github.com/본인계정/golani.git
+
+# 브랜치명 main으로 변경
+git branch -M main
+
+# 푸시
+git push -u origin main
+```
+
+# 브랜치명 확인/변경
+git branch -M main
+
+# 푸시
+git push -u origin main
+```
+
+---
+
+## 3. 크로스 플랫폼 빌드 및 체크섬 생성 (Windows에서)
+
+### 필수 Rust 타겟 설치 (최초 1회만)
+```powershell
+# Windows 타겟
+rustup target add x86_64-pc-windows-msvc
+rustup target add aarch64-pc-windows-msvc
+
+# Linux 타겟 (교차 컴파일용 - musl 툴체인 필요)
+rustup target add x86_64-unknown-linux-musl
+rustup target add aarch64-unknown-linux-musl
+
+# macOS 타겟 (교차 컴파일용 - 별도 툴체인 필요)
+rustup target add x86_64-apple-darwin
+rustup target add aarch64-apple-darwin
+```
+
+> **주의**: Linux/macOS 타겟 빌드하려면 별도 툴체인(llvm, mingw, osxcross 등) 필요.  
+> **Windows 타겟만 빌드**하려면 `generate_checksums.ps1`에서 Linux/macOS 타겟 부분 주석 처리하세요.
+
+### 크로스 빌드 + 체크섬 생성
+```powershell
+cd C:\Users\kfopb\Desktop\마크서버
+
+# v0.1.0 버전으로 빌드 + 체크섬 생성
+.\generate_checksums.ps1 -Version "v0.1.0"
+```
+
+### 빌드 결과 확인
+```powershell
+# 생성된 파일 확인
+ls dist\v0.1.0\
+
+# 출력 예시:
+# golani-windows-x64.exe
+# golani-windows-arm64.exe
+# golani-linux-x64
+# golani-linux-arm64
+# golani-macos-x64
+# golani-macos-arm64
+# CHECKSUMS.txt
+
+# 체크섬 확인
+Get-Content dist\v0.1.0\CHECKSUMS.txt
+```
+
+---
+
+## 4. GitHub Release 생성 (웹 브라우저에서)
+
+### 웹 UI로 생성 (권장)
+1. GitHub 저장소 페이지 → **Releases** → **Create a new release**
+2. **Tag version**: `v0.1.0` (새 태그 생성 선택)
+3. **Release title**: `golani v0.1.0 - Initial Release`
+4. **Description** (릴리스 노트):
+```markdown
+## golani v0.1.0 - 첫 정식 릴리스
+
+### 주요 기능
+- 🎮 **서버 생성 마법사**: 7단계로 Vanilla/Paper 서버 손쉽게 생성
+- 🖥️ **TUI (터미널 UI)**: 키보드 중심의 직관적 관리 인터페이스
+- 🌐 **Web UI**: 브라우저 기반 대시보드 (http://127.0.0.1:8788)
+- ⌨️ **RCON 콘솔**: 실시간 서버 콘솔, 명령 히스토리(↑/↓), ESC로 분리
+- ☕ **Java 자동 관리**: 버전별 Temurin 자동 설치, 수동 경로 지정 지원
+- 🔄 **서버 업데이트**: 최신 빌드 다운로드 → 검증 → 교체, 실패 시 자동 롤백
+- 🗑️ **안전한 삭제**: y/N 확인 + `삭제` 입력 2단계 확인
+- ⚙️ **설정 마이그레이션**: 서버 저장 위치 변경 시 데이터 자동 이동
+- 🛡️ **방화벽 자동 관리**: Windows Defender / UFW / firewalld 규칙 자동 추가/삭제
+- 🌍 **크로스 플랫폼**: Windows / Linux / macOS 지원
+
+### 설치 방법
+**Windows (PowerShell):**
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://get.golani.kro.kr/install.ps1 | iex"
+```
+
+**Linux/macOS (Bash):**
+```bash
+curl -fsSL https://get.golani.kro.kr/install.sh | bash
+```
+
+### 수동 설치
+아래 자산을 다운로드하여 PATH에 포함된 디렉토리에 배치하세요.
+
+### 체크섬 검증
+다운로드 후 SHA-256 체크섬을 확인하세요 (CHECKSUMS.txt 참조).
+```
+3. **Assets**: `dist/v0.1.0/` 폴더의 모든 파일(바이너리 6개 + CHECKSUMS.txt) 드래그 앤 드롭 업로드
+4. **Publish release** 클릭
+
+### CLI로 생성 (gh CLI 사용 시)
+```bash
+gh release create v0.1.0 \
+  --title "golani v0.1.0 - Initial Release" \
+  --notes-file RELEASE_NOTES.md \
+  dist/v0.1.0/*
+```
+
+---
+
+## 5. 설치 스크립트 배포 (get.golani.kro.kr)
+
+### 웹 서버 설정 (Nginx 예시)
+```nginx
+server {
+    listen 80;
+    server_name get.golani.kro.kr;
+    
+    location /install.sh {
+        add_header Content-Type text/plain;
+        alias /var/www/golani/install.sh;
+    }
+    
+    location /install.ps1 {
+        add_header Content-Type text/plain;
+        alias /var/www/golani/install.ps1;
+    }
+    
+    # 최신 버전 리다이렉트 (선택)
+    location /latest {
+        return 302 https://github.com/본인계정/golani/releases/latest;
+    }
+}
+```
+
+### 파일 복사
+```bash
+scp install.sh install.ps1 user@server:/var/www/golani/
+```
+
+### 테스트
+```bash
+# Linux/macOS
+curl -fsSL http://get.golani.kro.kr/install.sh | bash
+
+# Windows PowerShell
+irm http://get.golani.kro.kr/install.ps1 | iex
+```
+
+---
+
+## 6. 체크리스트 (릴리스 전 최종 확인)
+
+- [ ] `cargo test` 모든 테스트 통과
+- [ ] `cargo build --release` 빌드 성공
+- [ ] Windows x64/ARM64, Linux x64/ARM64, macOS x64/ARM64 빌드 확인
+- [ ] `CHECKSUMS.txt` 모든 파일과 일치
+- [ ] `golani --help` 정상 출력
+- [ ] `golani new paper test 1.21.4` 서버 생성 테스트
+- [ ] `golani start/stop/status/restart` 서버 제어 테스트
+- [ ] `golani attach/console` RCON 콘솔 테스트
+- [ ] `golani web` Web UI 접속 테스트 (localhost:8787)
+- [ ] `golani settings path/java` 설정 변경 테스트
+- [ ] 방화벽 규칙 자동 추가/삭제 확인
+- [ ] 설치 스크립트(install.sh/ps1) 동작 확인
+- [ ] GitHub Release Assets 업로드 완료
+- [ ] 설치 스크립트 URL(get.golani.kro.kr) 접근 확인
+
+---
+
+## 7. 버전 관리 규칙
+
+### 시맨틱 버저닝
+- **Major**: 호환되지 않는 API 변경
+- **Minor**: 하위 호환 기능 추가
+- **Patch**: 버그 픽스
+
+### 태그/브랜치 전략
+```
+main (보호 브랜치)
+├── v0.1.0 (tag)
+├── v0.1.1 (tag) - 패치
+├── v0.2.0 (tag) - 마이너
+└── develop (개발용 브랜치, 선택사항)
+```
+
+### 다음 버전 예시
+- `v0.1.1`: 버그 픽스 (설치 스크립트 오타 수정 등)
+- `v0.2.0`: 백업/복원 기능 추가, 플러그인 관리 UI
+- `v1.0.0`: API 안정화, 프로덕션 준비 완료
+
+---
+
+## 8. 문제 해결 (Troubleshooting)
+
+### 빌드 실패
+```bash
+# 타겟 누락
+rustup target add x86_64-pc-windows-msvc
+
+# 의존성 갱신
+cargo update
+cargo clean && cargo build --release
+```
+
+### 교차 컴파일 링커 오류 (Linux에서 Windows 빌드)
+```bash
+# mingw-w64 설치
+sudo apt install mingw-w64
+# Cargo config에 링커 설정 필요
+```
+
+### GitHub Release 업로드 실패
+- 파일 크기 제한 확인 (2GB 이하)
+- 토큰 권한 확인 (repo, write:packages)
+- gh CLI 버전 최신화: `gh upgrade`
+
+---
+
+## 9. 자동화 (선택사항 - GitHub Actions)
+
+### .github/workflows/release.yml
+```yaml
+name: Release
+on:
+  push:
+    tags: ['v*']
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [
+          x86_64-pc-windows-msvc,
+          aarch64-pc-windows-msvc,
+          x86_64-unknown-linux-musl,
+          aarch64-unknown-linux-musl,
+          x86_64-apple-darwin,
+          aarch64-apple-darwin
+        ]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: golani-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/golani*
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+      - name: Generate checksums
+        run: sha256sum * > CHECKSUMS.txt
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            golani-*
+            CHECKSUMS.txt
+```
+
+---
+
+## 요약: 실행 순서 (복사해서 순서대로 실행)
+
+```powershell
+# 1. 프로젝트 폴더로 이동
+cd C:\Users\kfopb\Desktop\마크서버
+
+# 2. 최종 테스트
+cargo test
+cargo build --release
+
+# 3. 크로스 빌드 + 체크섬
+.\generate_checksums.ps1 -Version "v0.1.0"
+
+# 4. Git 커밋/푸시
+git add .
+git commit -m "chore: prepare v0.1.0 release"
+git push
+
+# 4. GitHub에서 Release 생성 (브라우저에서)
+#    - Tag: v0.1.0
+#    - Assets: dist\v0.1.0\* 업로드
+
+# 5. 설치 스크립트 배포 (서버에서)
+#    install.sh, install.ps1 → /var/www/golani/
+
+# 5. 설치 테스트
+irm http://get.golani.kro.kr/install.ps1 | iex
+```
+
+---
+
+**이 파일(up.txt)을 프로젝트 루트에 저장하고, 위 순서대로 진행하세요.**

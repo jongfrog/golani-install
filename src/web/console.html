@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>golani - 콘솔</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #1a1a2e; color: #eee; min-height: 100vh; display:flex; flex-direction:column; }
+header { background: #16213e; padding: 1rem 2rem; border-bottom: 1px solid #0f3460; display: flex; justify-content: space-between; align-items: center; }
+header h1 { color: #e94560; font-size: 1.5rem; }
+.btn { padding: 0.5rem 1rem; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9rem; transition: all 0.2s; }
+.btn-secondary { background: #0f3460; color: #eee; border: 1px solid #16213e; }
+.btn-secondary:hover { background: #16213e; }
+.main { flex: 1; display: flex; flex-direction: column; padding: 2rem; }
+.console-container { flex: 1; background: #0f0f1a; border-radius: 8px; display: flex; flex-direction: column; border: 1px solid #0f3460; max-width: 1000px; margin: 0 auto; width: 100%; }
+.console-output { flex: 1; overflow-y: auto; padding: 1rem; font-family: monospace; font-size: 0.85rem; }
+.console-line { margin-bottom: 0.25rem; white-space: pre-wrap; word-break: break-all; }
+.console-line.command { color: #4ade80; }
+.console-line.output { color: #eee; }
+.console-line.system { color: #fbbf24; }
+.console-input-area { display: flex; gap: 0.5rem; padding: 1rem; border-top: 1px solid #0f3460; }
+.console-input-area input { flex: 1; padding: 0.5rem; border: 1px solid #0f3460; background: #16213e; color: #eee; border-radius: 4px; font-family: monospace; }
+.console-input-area input:focus { outline: none; border-color: #e94560; }
+.btn-primary { background: #e94560; color: white; }
+.btn-primary:hover { background: #d63a55; }
+.server-info { padding: 1rem; background: #16213e; border-radius: 8px; margin-bottom: 1rem; max-width: 1000px; margin-left:auto; margin-right:auto; width:calc(100% - 4rem); }
+.server-info h2 { color: #e94560; display: inline; }
+.server-info .meta { color: #888; font-size: 0.9rem; margin-left: 1rem; }
+</style>
+</head>
+<body>
+<header>
+<h1>GOLANI - 콘솔</h1>
+<a href="/" class="btn btn-secondary">← 메인으로</a>
+</header>
+<main class="main">
+<div class="server-info" id="serverInfo"></div>
+<div class="console-container">
+<div class="console-output" id="consoleOutput"></div>
+<div class="console-input-area">
+<input type="text" id="consoleInput" placeholder="명령어를 입력하세요 (exit로 종료, ESC로 메인화면)" autocomplete="off" spellcheck="false">
+<button class="btn btn-primary" onclick="sendCommand()">전송</button>
+</div>
+</div>
+</main>
+<script>
+const params = new URLSearchParams(window.location.search);
+const serverName = params.get('name');
+let ws = null;
+const output = document.getElementById('consoleOutput');
+const input = document.getElementById('consoleInput');
+
+document.getElementById('serverInfo').innerHTML = `<h2>${serverName}</h2><span class="meta">WebSocket 콘솔 연결 중...</span>`;
+
+function connect() {
+ws = new WebSocket(`ws://${location.host}/api/servers/${encodeURIComponent(serverName)}/console/ws`);
+ws.onopen = () => {
+document.getElementById('serverInfo').innerHTML = `<h2>${serverName}</h2><span class="meta" style="color:#4ade80">● 연결됨 - 명령어 입력 가능 (exit로 종료)</span>`;
+};
+ws.onmessage = (e) => {
+const line = document.createElement('div');
+line.className = 'console-line output';
+line.textContent = e.data;
+output.appendChild(line);
+output.scrollTop = output.scrollHeight;
+};
+ws.onclose = () => {
+document.getElementById('serverInfo').innerHTML = `<h2>${serverName}</h2><span class="meta" style="color:#f87171">연결 종료됨 - <a href="/" style="color:#e94560">메인으로</a></span>`;
+input.disabled = true;
+};
+ws.onerror = () => {
+document.getElementById('serverInfo').innerHTML = `<h2>${serverName}</h2><span class="meta" style="color:#f87171">연결 오류 - <a href="/" style="color:#e94560">메인으로</a></span>`;
+input.disabled = true;
+};
+}
+
+function sendCommand() {
+const cmd = input.value.trim();
+if (!cmd || !ws) return;
+const line = document.createElement('div');
+line.className = 'console-line command';
+line.textContent = '> ' + cmd;
+output.appendChild(line);
+ws.send(cmd);
+input.value = '';
+output.scrollTop = output.scrollHeight;
+}
+
+input.addEventListener('keydown', (e) => {
+if (e.key === 'Enter') {
+sendCommand();
+} else if (e.key === 'Escape') {
+window.location.href = '/';
+}
+});
+
+connect();
+</script>
+</body>
+</html>
