@@ -70,33 +70,28 @@ jobs:
           path: dist/${{ github.ref_name }}
           merge-multiple: true
 
-      - name: Debug artifact structure
-        run: |
-          cd dist/${{ github.ref_name }}
-          find . -type f -name "*" | sort
-
       - name: Package Windows
         run: |
           cd dist/${{ github.ref_name }}
-          mv golani-windows-x64/golani.exe .
+          find . -name "golani.exe" -exec mv {} . \;
           zip golani-windows-x64.zip golani.exe
 
       - name: Package Linux
         run: |
           cd dist/${{ github.ref_name }}
-          mv golani-linux-x64/golani .
+          find . -name "golani" -path "*/golani-linux-x64/*" -exec mv {} . \;
           tar -czf golani-linux-x64.tar.gz golani
 
       - name: Package macOS x64
         run: |
           cd dist/${{ github.ref_name }}
-          mv golani-macos-x64/golani .
+          find . -name "golani" -path "*/golani-macos-x64/*" -exec mv {} . \;
           tar -czf golani-macos-x64.tar.gz golani
 
       - name: Package macOS ARM64
         run: |
           cd dist/${{ github.ref_name }}
-          mv golani-macos-arm64/golani .
+          find . -name "golani" -path "*/golani-macos-arm64/*" -exec mv {} . \;
           tar -czf golani-macos-arm64.tar.gz golani
 
       - name: Generate checksums
