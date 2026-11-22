@@ -68,13 +68,20 @@ try {
 Write-Info "압축 해제 중..."
 Expand-Archive -Path "$TempDir\golani.zip" -DestinationPath $TempDir -Force
 
+# 압축 해제된 exe 찾기 (Expand-Archive가 서브디렉토리 생성할 수 있음)
+$ExePath = Get-ChildItem -Path $TempDir -Filter "golani.exe" -Recurse | Select-Object -First 1 -ExpandProperty FullName
+if (-not $ExePath) {
+    Write-Error "압축 해제 후 golani.exe를 찾을 수 없음"
+    exit 1
+}
+
 # 설치 디렉토리 생성
 New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
 New-Item -ItemType Directory -Path $GolaniHome -Force | Out-Null
 
 # 설치
 Write-Info "설치 중: $InstallDir\golani.exe"
-Move-Item -Path "$TempDir\golani.exe" -Destination "$InstallDir\golani.exe" -Force
+Move-Item -Path $ExePath -Destination "$InstallDir\golani.exe" -Force
 
 # PATH 등록
 $CurrentPath = [Environment]::GetEnvironmentVariable("Path", "User")
