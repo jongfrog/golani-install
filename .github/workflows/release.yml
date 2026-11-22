@@ -16,20 +16,20 @@ jobs:
         include:
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            artifact: golani-windows-x64.zip
             binary: golani.exe
+            platform: windows-x64
           - os: ubuntu-latest
             target: x86_64-unknown-linux-musl
-            artifact: golani-linux-x64.tar.gz
             binary: golani
+            platform: linux-x64
           - os: macos-latest
             target: x86_64-apple-darwin
-            artifact: golani-macos-x64.tar.gz
             binary: golani
+            platform: macos-x64
           - os: macos-latest
             target: aarch64-apple-darwin
-            artifact: golani-macos-arm64.tar.gz
             binary: golani
+            platform: macos-arm64
     steps:
       - uses: actions/checkout@v4
 
@@ -54,28 +54,11 @@ jobs:
       - name: Build
         run: cargo build --release --target ${{ matrix.target }}
 
-      - name: Package Windows
-        if: runner.os == 'Windows'
-        run: |
-          $dist = "dist/${{ github.ref_name }}"
-          New-Item -ItemType Directory -Force -Path $dist
-          Copy-Item "target/${{ matrix.target }}/release/${{ matrix.binary }}" "$dist/golani.exe"
-          Compress-Archive -Path "$dist/golani.exe" -DestinationPath "$dist/${{ matrix.artifact }}"
-
-      - name: Package Unix
-        if: runner.os != 'Windows'
-        run: |
-          mkdir -p dist/${{ github.ref_name }}
-          cp target/${{ matrix.target }}/release/${{ matrix.binary }} dist/${{ github.ref_name }}/golani
-          cd dist/${{ github.ref_name }}
-          tar -czf ${{ matrix.artifact }} golani
-          cd ../..
-
-      - name: Upload artifacts
+      - name: Upload binary
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
-          path: dist/${{ github.ref_name }}/${{ matrix.artifact }}
+          name: golani-${{ matrix.platform }}
+          path: target/${{ matrix.target }}/release/${{ matrix.binary }}
           retention-days: 1
 
   release:
@@ -86,6 +69,30 @@ jobs:
         with:
           path: dist/${{ github.ref_name }}
           merge-multiple: true
+
+      - name: Package Windows
+        run: |
+          cd dist/${{ github.ref_name }}
+          mv golani-windows-x64 golani.exe
+          zip golani-windows-x64.zip golani.exe
+
+      - name: Package Linux
+        run: |
+          cd dist/${{ github.ref_name }}
+          mv golani-linux-x64 golani
+          tar -czf golani-linux-x64.tar.gz golani
+
+      - name: Package macOS x64
+        run: |
+          cd dist/${{ github.ref_name }}
+          mv golani-macos-x64 golani
+          tar -czf golani-macos-x64.tar.gz golani
+
+      - name: Package macOS ARM64
+        run: |
+          cd dist/${{ github.ref_name }}
+          mv golani-macos-arm64 golani
+          tar -czf golani-macos-arm64.tar.gz golani
 
       - name: Generate checksums
         run: |
