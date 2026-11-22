@@ -70,6 +70,11 @@ jobs:
           path: dist/${{ github.ref_name }}
           merge-multiple: true
 
+      - name: Debug artifact structure
+        run: |
+          cd dist/${{ github.ref_name }}
+          find . -type f -name "*" | sort
+
       - name: Package Windows
         run: |
           cd dist/${{ github.ref_name }}
