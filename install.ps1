@@ -20,7 +20,7 @@ function Write-Warn { param($msg) Write-Host "[WARN] $msg" -ForegroundColor Yell
 function Write-Error { param($msg) Write-Host "[ERROR] $msg" -ForegroundColor Red }
 
 # 설정
-$Repo = "nousresearch/golani"
+$Repo = "jongfrog/golani-install"
 $InstallDir = "$env:LOCALAPPDATA\golani"
 $GolaniHome = "$env:USERPROFILE\.golani"
 

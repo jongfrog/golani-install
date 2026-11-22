@@ -11,7 +11,7 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-REPO="nousresearch/golani"
+REPO="jongfrog/golani-install"
 INSTALL_DIR="$HOME/.local/bin"
 GOLANI_HOME="$HOME/.golani"
 
