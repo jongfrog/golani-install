@@ -73,25 +73,25 @@ jobs:
       - name: Package Windows
         run: |
           cd dist/${{ github.ref_name }}
-          mv golani-windows-x64 golani.exe
+          mv golani-windows-x64/golani-windows-x64 golani.exe
           zip golani-windows-x64.zip golani.exe
 
       - name: Package Linux
         run: |
           cd dist/${{ github.ref_name }}
-          mv golani-linux-x64 golani
+          mv golani-linux-x64/golani-linux-x64 golani
           tar -czf golani-linux-x64.tar.gz golani
 
       - name: Package macOS x64
         run: |
           cd dist/${{ github.ref_name }}
-          mv golani-macos-x64 golani
+          mv golani-macos-x64/golani-macos-x64 golani
           tar -czf golani-macos-x64.tar.gz golani
 
       - name: Package macOS ARM64
         run: |
           cd dist/${{ github.ref_name }}
-          mv golani-macos-arm64 golani
+          mv golani-macos-arm64/golani-macos-arm64 golani
           tar -czf golani-macos-arm64.tar.gz golani
 
       - name: Generate checksums
