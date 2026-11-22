@@ -4,3 +4,5 @@ Cargo.lock
 *.exe
 dist/
 *.log
+지침서.txt
+up.txt
