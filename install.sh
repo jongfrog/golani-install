@@ -105,9 +105,9 @@ main() {
         echo "  export PATH=\"\$PATH:$INSTALL_DIR\""
     fi
 
-    # 데이터 디렉토리 초기화
+    # 데이터 디렉토리 초기화 (버전 확인만으로 설정 디렉토리 생성)
     log_info "데이터 디렉토리 초기화: $GOLANI_HOME"
-    "$INSTALL_DIR/golani" >/dev/null 2>&1 || true
+    "$INSTALL_DIR/golani" --version >/dev/null 2>&1 || true
 
     log_success "설치 완료!"
     echo

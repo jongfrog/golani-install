@@ -92,9 +92,9 @@ if ($CurrentPath -notlike "*$InstallDir*") {
     Write-Success "PATH에 추가됨 (새 터미널에서 적용됨)"
 }
 
-# 데이터 디렉토리 초기화
+# 데이터 디렉토리 초기화 (버전 확인만으로 설정 디렉토리 생성)
 Write-Info "데이터 디렉토리 초기화: $GolaniHome"
-& "$InstallDir\golani.exe" 2>$null | Out-Null
+& "$InstallDir\golani.exe" --version 2>$null | Out-Null
 
 # 정리
 Remove-Item -Path $TempDir -Recurse -Force -ErrorAction SilentlyContinue
