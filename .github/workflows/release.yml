@@ -84,7 +84,6 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          pattern: golani-*
           path: dist/${{ github.ref_name }}
           merge-multiple: true
 
