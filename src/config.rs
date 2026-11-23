@@ -11,13 +11,29 @@ pub struct Config {
     pub servers_dir: PathBuf,
     #[serde(default)]
     pub java_path: Option<PathBuf>,
+    #[serde(default = "default_ram")]
+    pub default_ram_mb: u32,
+    #[serde(default = "default_true")]
+    pub web_ui_enabled: bool,
+    #[serde(default = "default_true")]
+    pub firewall_managed: bool,
+    #[serde(default = "default_web_port")]
+    pub web_ui_port: u16,
 }
+
+fn default_ram() -> u32 { 2048 }
+fn default_true() -> bool { true }
+fn default_web_port() -> u16 { 8788 }
 
 impl Config {
     pub fn default_for(paths: &AppPaths) -> Self {
         Self {
             servers_dir: paths.servers_dir(),
             java_path: None,
+            default_ram_mb: 2048,
+            web_ui_enabled: true,
+            firewall_managed: true,
+            web_ui_port: 8788,
         }
     }
 

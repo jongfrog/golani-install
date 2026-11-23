@@ -449,7 +449,7 @@ async fn run(arguments: Vec<String>) -> golani::error::Result<()> {
                                                 &application.paths,
                                                 metadata.java_version,
                                             ).ok_or_else(|| golani::error::Error::ServerCreation("호환되는 Java를 찾을 수 없습니다. golani java <버전>을 먼저 실행하세요.".into()))?;
-                                            let running = start(&server_dir, &java.executable)?;
+                                            let running = start(&server_dir, &java.executable).await?;
                                             println!("서버를 시작했습니다 (PID: {})", running.pid);
                                         }
                                         "restart" => {

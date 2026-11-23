@@ -25,6 +25,10 @@ fn saved_server_directory_is_reused() {
     let stored = Config {
         servers_dir: external_servers.clone(),
         java_path: None,
+        default_ram_mb: 2048,
+        web_ui_enabled: true,
+        firewall_managed: true,
+        web_ui_port: 8788,
     };
     fs::write(root.join("config.toml"), toml::to_string(&stored).unwrap()).unwrap();
 

@@ -206,7 +206,7 @@ async fn start_server(
         .map(|j| j.executable);
     match java {
         Ok(java_path) => {
-            match start(&server_dir, &java_path) {
+            match start(&server_dir, &java_path).await {
                 Ok(_) => StatusCode::NO_CONTENT,
                 Err(_) => StatusCode::BAD_REQUEST,
             }

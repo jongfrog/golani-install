@@ -1,4 +1,5 @@
 use std::{
+    env,
     fs::{self, OpenOptions},
     io::{BufRead, BufReader},
     path::{Path, PathBuf},
@@ -17,6 +18,151 @@ use crate::{
     minecraft::{MinecraftApi, ServerKind, ServerMetadata},
     rcon,
 };
+
+use reqwest::Client;
+use sha1::{Digest, Sha1};
+use hex;
+
+const VANILLA_MANIFEST: &str = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
+const USER_AGENT: &str = "golani/0.1.0 (https://golani.kro.kr)";
+
+fn get_paperclip_cache_dir() -> PathBuf {
+    if let Some(home) = env::var_os("HOME") {
+        PathBuf::from(home).join(".paperclip")
+    } else if let Some(appdata) = env::var_os("APPDATA") {
+        PathBuf::from(appdata).join("Paperclip")
+    } else {
+        PathBuf::from(".").join(".paperclip")
+    }
+}
+
+async fn ensure_vanilla_jar(version: &str) -> Result<PathBuf> {
+    let cache_dir = get_paperclip_cache_dir();
+    let vanilla_jar = cache_dir.join(format!("{version}.jar"));
+
+    if vanilla_jar.exists() {
+        return Ok(vanilla_jar);
+    }
+
+    fs::create_dir_all(&cache_dir)?;
+
+    // Try to download with retries
+    let max_retries = 3;
+    let mut last_error = None;
+
+    for attempt in 1..=max_retries {
+        match try_download_vanilla_jar(version, &cache_dir).await {
+            Ok(path) => return Ok(path),
+            Err(e) => {
+                last_error = Some(e);
+                if attempt < max_retries {
+                    tokio::time::sleep(Duration::from_secs(2 * attempt)).await;
+                }
+            }
+        }
+    }
+
+    // If download fails but we have a cached vanilla JAR from another version, try to use that
+    if let Ok(entries) = fs::read_dir(&cache_dir) {
+        for entry in entries.flatten() {
+            if entry.path().extension().map_or(false, |e| e == "jar") {
+                let dest = cache_dir.join(format!("{}.jar", version));
+                if fs::copy(entry.path(), &dest).is_ok() {
+                    return Ok(dest);
+                }
+            }
+        }
+    }
+
+    // Network failed - log warning and continue, let Paperclip try its own download
+    eprintln!("[WARN] Failed to pre-download vanilla JAR for {version}: {}. Paperclip will attempt its own download.", 
+        last_error.as_ref().map(|e| e.to_string()).unwrap_or_else(|| "unknown error".to_string()));
+    eprintln!("[WARN] If Paperclip fails with SSL errors, manually place the vanilla {version}.jar in {}.", get_paperclip_cache_dir().display());
+
+    // Return a dummy path - the actual start will proceed and Paperclip will try to download
+    Ok(vanilla_jar)
+}
+
+async fn try_download_vanilla_jar(version: &str, cache_dir: &Path) -> Result<PathBuf> {
+    let vanilla_jar = cache_dir.join(format!("{version}.jar"));
+    if vanilla_jar.exists() {
+        return Ok(vanilla_jar);
+    }
+    
+    fs::create_dir_all(cache_dir)?;
+    
+    // Fetch vanilla manifest
+    let client = reqwest::Client::builder()
+        .user_agent(USER_AGENT)
+        .timeout(Duration::from_secs(30))
+        .build()?;
+
+    let manifest: serde_json::Value = client
+        .get(VANILLA_MANIFEST)
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+
+    // Find version entry
+    let version_entry = manifest["versions"]
+        .as_array()
+        .ok_or_else(|| Error::ServerCreation("Invalid manifest format".into()))?
+        .iter()
+        .find(|v| v["id"].as_str() == Some(version))
+        .ok_or_else(|| Error::ServerCreation(format!("Version {} not found in manifest", version)))?;
+
+    let version_url = version_entry["url"].as_str()
+        .ok_or_else(|| Error::ServerCreation("Version URL not found".into()))?;
+
+    // Fetch version details
+    let version_detail: serde_json::Value = reqwest::Client::builder()
+        .user_agent(USER_AGENT)
+        .timeout(Duration::from_secs(30))
+        .build()?
+        .get(version_url)
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+
+    let downloads = version_detail["downloads"].as_object()
+        .ok_or_else(|| Error::ServerCreation("No downloads in version detail".into()))?;
+
+    let server_download = downloads.get("server")
+        .ok_or_else(|| Error::ServerCreation("Server download not available for this version".into()))?;
+
+    let server_url = server_download["url"].as_str()
+        .ok_or_else(|| Error::ServerCreation("Server download URL not found".into()))?;
+
+    let expected_sha1 = server_download["sha1"].as_str()
+        .ok_or_else(|| Error::ServerCreation("Server SHA1 not found".into()))?;
+
+    // Download server jar
+    let response = reqwest::Client::builder()
+        .user_agent(USER_AGENT)
+        .timeout(Duration::from_secs(300))
+        .build()?
+        .get(server_url)
+        .send()
+        .await?
+        .error_for_status()?;
+
+    let bytes = response.bytes().await?;
+
+    // Verify SHA1
+    let actual_sha1 = hex::encode(Sha1::digest(&bytes));
+    if !actual_sha1.eq_ignore_ascii_case(expected_sha1) {
+        return Err(Error::Verification("Vanilla JAR SHA1 mismatch".into()));
+    }
+
+    let vanilla_jar_path = cache_dir.join(format!("{version}.jar"));
+    fs::write(&vanilla_jar_path, &bytes)?;
+
+    Ok(vanilla_jar_path)
+}
 
 pub struct RunningServer {
     _lock: ServerLock,
@@ -106,7 +252,7 @@ pub fn rcon_settings(server_dir: &Path) -> Option<(u16, String)> {
     Some((port?, password?))
 }
 
-pub fn start(server_dir: &Path, java: &Path) -> Result<RunningServer> {
+pub async fn start(server_dir: &Path, java: &Path) -> Result<RunningServer> {
     let metadata = load_metadata(server_dir)?;
     validate_java(java, metadata.java_version)?;
     if let Some(pid) = recorded_running_pid(server_dir) {
@@ -114,6 +260,10 @@ pub fn start(server_dir: &Path, java: &Path) -> Result<RunningServer> {
             "서버가 이미 실행 중입니다 (PID: {pid})"
         )));
     }
+    
+    // Pre-download vanilla JAR for Paperclip cache
+    ensure_vanilla_jar(&metadata.minecraft_version).await?;
+    
     let lock = ServerLock::acquire(server_dir)?;
     let log = OpenOptions::new()
         .create(true)
@@ -200,7 +350,7 @@ pub async fn restart(server_dir: &Path, java: &Path) -> Result<RunningServer> {
     if recorded_running_pid(server_dir).is_some() {
         stop(server_dir).await?;
     }
-    start(server_dir, java)
+    start(server_dir, java).await
 }
 
 pub fn latest_log_tail(server_dir: &Path, lines: usize) -> Result<String> {
