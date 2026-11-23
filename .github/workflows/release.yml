@@ -103,6 +103,6 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            golani-*
-            CHECKSUMS.txt
+            dist/${{ github.ref_name }}/golani-*
+            dist/${{ github.ref_name }}/CHECKSUMS.txt
           generate_release_notes: true
