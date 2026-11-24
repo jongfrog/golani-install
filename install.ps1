@@ -81,6 +81,13 @@ New-Item -ItemType Directory -Path $GolaniHome -Force | Out-Null
 
 # 설치
 Write-Info "설치 중: $InstallDir\golani.exe"
+# 기존 프로세스 종료
+$Processes = Get-Process -Name "golani" -ErrorAction SilentlyContinue
+if ($Processes) {
+    Write-Warn "기존 golani 프로세스 종료 중..."
+    Stop-Process -Name "golani" -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 1
+}
 if (Test-Path "$InstallDir\golani.exe") {
     Remove-Item -Path "$InstallDir\golani.exe" -Force -ErrorAction SilentlyContinue
 }
