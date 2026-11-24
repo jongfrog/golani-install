@@ -386,8 +386,17 @@ impl App {
             Screen::ConfirmDelete(msg) => {
                 if matches!(key.code, KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter) {
                     if msg.contains("golani 프로그램을 제거") {
-                        // 프로그램 제거: 설정/데이터 유지하고 실행파일만 삭제 안내
-                        self.screen = Screen::Info("golani 제거: `cargo uninstall golani` 또는 설치된 실행파일 수동 삭제\n(설정: ~/.golani, 데이터: ~/.golani/servers 유지)".to_string());
+                        // 프로그램 제거: 설치된 실행파일 삭제
+                        let install_dir = dirs::data_dir().unwrap_or_else(|| std::env::current_dir().unwrap()).join("golani");
+                        let exe_path = install_dir.join("golani.exe");
+                        match std::fs::remove_file(&exe_path) {
+                            Ok(_) => {
+                                self.screen = Screen::Info("golani 실행파일이 제거되었습니다.\n(설정: ~/.golani, 데이터: ~/.golani/servers는 유지됩니다)".to_string());
+                            }
+                            Err(e) => {
+                                self.screen = Screen::Error(format!("제거 실패: {}", e));
+                            }
+                        }
                     } else {
                         let path = self.servers_dir.join(&msg);
                         if let Err(e) = crate::server::delete(&path, "삭제") {
