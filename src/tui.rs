@@ -822,13 +822,6 @@ impl App {
                             });
                         }
                         1 => {
-                            // 프로그램 정보
-                            self.screen = Screen::Info(format!(
-                                "golani v{} - Minecraft 서버 관리 도구\n\nRust + ratatui + axum\nGitHub: https://github.com/jongfrog/golani-install",
-                                env!("CARGO_PKG_VERSION")
-                            ));
-                        }
-                        2 => {
                             // 프로그램 제거
                             self.screen = Screen::ConfirmDelete("golani 프로그램을 제거하시겠습니까? (설정과 데이터는 유지됩니다)".to_string());
                         }
@@ -1550,23 +1543,27 @@ impl App {
         let areas = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(5),
+                Constraint::Length(7),
                 Constraint::Min(1),
                 Constraint::Length(4),
             ])
             .margin(1)
             .split(f.area());
 
-        let header = Paragraph::new(" 프로그램 관리 ")
-            .block(Block::default().borders(Borders::ALL).title(" 프로그램 관리 ").border_style(Style::default().fg(Color::Green)))
-            .style(Style::default().fg(Color::Green).add_modifier(Modifier::BOLD))
-            .alignment(Alignment::Center);
+        let version = env!("CARGO_PKG_VERSION");
+        let header = Paragraph::new(format!(
+            " golani v{} - Minecraft 서버 관리 도구\n\nRust + ratatui + axum\nGitHub: https://github.com/jongfrog/golani-install",
+            version
+        ))
+        .block(Block::default().borders(Borders::ALL).title(" 프로그램 관리 ").border_style(Style::default().fg(Color::Green)))
+        .style(Style::default().fg(Color::Green))
+        .alignment(Alignment::Center)
+        .wrap(Wrap { trim: true });
         f.render_widget(header, areas[0]);
 
         let items = vec![
-            "  1. 프로그램 업데이트 (golani update)".to_string(),
-            "  2. 프로그램 정보".to_string(),
-            "  3. 프로그램 제거".to_string(),
+            "  1. 프로그램 업데이트".to_string(),
+            "  2. 프로그램 제거".to_string(),
         ];
         let list_items: Vec<ListItem> = items.iter().enumerate().map(|(i, text)| {
             let style = if self.menu_list_state.selected() == Some(i) {
