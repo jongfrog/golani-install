@@ -224,6 +224,10 @@ async fn run(arguments: Vec<String>) -> golani::error::Result<()> {
         print_help();
         return Ok(());
     }
+    if arguments.iter().any(|a| a == "--version" || a == "-v") {
+        println!("golani {}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
     if arguments.is_empty() {
         return golani::tui::run(&golani::paths::AppPaths::discover()?.root().join("servers"));
     }

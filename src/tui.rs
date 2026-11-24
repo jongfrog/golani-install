@@ -387,23 +387,37 @@ impl App {
                 if matches!(key.code, KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter) {
                     if msg.contains("golani 프로그램을 제거") {
                         // 프로그램 제거: 실행파일 + 설정 + 데이터 모두 삭제
-                        let install_dir = dirs::data_dir().unwrap_or_else(|| std::env::current_dir().unwrap()).join("golani");
-                        let exe_path = install_dir.join("golani.exe");
                         let mut removed_exe = false;
                         let mut removed_dir = false;
                         
-                        // 실행파일 삭제
-                        if exe_path.exists() {
-                            if std::fs::remove_file(&exe_path).is_ok() {
-                                removed_exe = true;
+                        // 실행파일 삭제 시도 (여러 위치 확인)
+                        let possible_exe_paths = vec![
+                            dirs::data_dir().unwrap_or_else(|| std::env::current_dir().unwrap()).join("golani").join("golani.exe"),
+                            dirs::home_dir().unwrap_or_else(|| std::env::current_dir().unwrap()).join(".golani").join("golani.exe"),
+                            std::env::current_exe().ok().unwrap_or_default(),
+                        ];
+                        
+                        for exe_path in possible_exe_paths {
+                            if exe_path.exists() {
+                                if std::fs::remove_file(&exe_path).is_ok() {
+                                    removed_exe = true;
+                                    break;
+                                }
                             }
                         }
                         
                         // 설정/데이터 디렉토리 전체 삭제
-                        let golani_home = dirs::home_dir().unwrap_or_else(|| std::env::current_dir().unwrap()).join(".golani");
-                        if golani_home.exists() {
-                            if std::fs::remove_dir_all(&golani_home).is_ok() {
-                                removed_dir = true;
+                        let possible_data_dirs = vec![
+                            dirs::home_dir().unwrap_or_else(|| std::env::current_dir().unwrap()).join(".golani"),
+                            dirs::data_dir().unwrap_or_else(|| std::env::current_dir().unwrap()).join("golani"),
+                        ];
+                        
+                        for data_dir in possible_data_dirs {
+                            if data_dir.exists() {
+                                if std::fs::remove_dir_all(&data_dir).is_ok() {
+                                    removed_dir = true;
+                                    break;
+                                }
                             }
                         }
                         
@@ -415,7 +429,7 @@ impl App {
                             msg.push_str("설정 및 데이터(~/.golani)가 완전히 제거되었습니다.\\n");
                         }
                         if !removed_exe && !removed_dir {
-                            msg.push_str("제거할 파일이 없습니다.\\n");
+                            msg.push_str("제거할 파일이 없습니다. (이미 제거되었거나 다른 위치에 있음)\\n");
                         }
                         self.screen = Screen::Info(msg);
                     } else {
