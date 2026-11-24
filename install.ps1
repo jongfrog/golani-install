@@ -121,3 +121,8 @@ Write-Info "문서: https://golani.kro.kr"
 
 # 새 PowerShell 세션에서 PATH 적용 안내
 Write-Warn "변경된 PATH를 적용하려면 새 PowerShell 창을 여세요."
+
+# 자동 실행
+Write-Info "golani 실행 중..."
+Start-Sleep -Seconds 1
+& "$InstallDir\golani.exe"

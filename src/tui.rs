@@ -797,7 +797,10 @@ impl App {
                                             3 => self.toggle_web_ui(),
                                             4 => self.edit_web_ui_port(),
                                             5 => self.toggle_firewall(),
-                                            6 => self.screen = Screen::ProgramManagement,
+                                            6 => {
+                                            self.menu_list_state.select(Some(0));
+                                            self.screen = Screen::ProgramManagement;
+                                        }
                                             _ => {}
                                         }
                 }
