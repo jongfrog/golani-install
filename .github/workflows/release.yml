@@ -58,9 +58,11 @@ jobs:
           cargo clean
           echo "=== Rust version ===" && rustc --version
           echo "=== Cargo version ===" && cargo --version
+          echo "=== Profile ===" && cargo metadata --format-version=1 | jq -r '.packages[] | select(.name=="golani") | .targets[0].profile'
           echo "=== Source verification ===" && type src/main.rs | head -5
-          cargo build --release --target ${{ matrix.target }} --verbose 2>&1 | tail -50
+          cargo build --release --target ${{ matrix.target }} --verbose 2>&1 | tail -100
           echo "=== Binary size ===" && dir target\\${{ matrix.target }}\\release\\${{ matrix.binary }}
+          echo "=== Binary info ===" && dumpbin /headers target\\${{ matrix.target }}\\release\\${{ matrix.binary }} | head -20
         shell: cmd
 
       - name: Build Linux/macOS
@@ -70,8 +72,9 @@ jobs:
           echo "=== Rust version ===" && rustc --version
           echo "=== Cargo version ===" && cargo --version
           echo "=== Source verification ===" && head -5 src/main.rs
-          cargo build --release --target ${{ matrix.target }} --verbose 2>&1 | tail -50
+          cargo build --release --target ${{ matrix.target }} --verbose 2>&1 | tail -100
           echo "=== Binary size ===" && ls -la target/${{ matrix.target }}/release/${{ matrix.binary }}
+          echo "=== Binary info ===" && file target/${{ matrix.target }}/release/${{ matrix.binary }}
 
       - name: Upload binary
         uses: actions/upload-artifact@v4
