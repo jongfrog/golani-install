@@ -1,5 +1,5 @@
 use crate::{
-    error::Result,
+    error::{Error, Result},
     server::{load_metadata, recorded_running_pid},
     minecraft::ServerKind,
     java::{find_system_java, managed_java},
@@ -33,7 +33,39 @@ use tokio::sync::mpsc;
 use reqwest;
 use serde_json;
 
-pub fn run(servers_dir: &std::path::Path) -> Result<()> {
+pub async fn check_for_update() -> Result<Option<String>> {
+    const GITHUB_API: &str = "https://api.github.com/repos/jongfrog/golani-install/releases/latest";
+    const USER_AGENT: &str = "golani/0.1.29 (https://golani.kro.kr)";
+    
+    let client = reqwest::Client::builder()
+        .user_agent(USER_AGENT)
+        .build()?;
+    
+    let resp = client.get(GITHUB_API)
+        .send()
+        .await
+        .ok()
+        .and_then(|r| r.error_for_status().ok());
+    
+    let release = if let Some(resp) = resp {
+        resp.json::<serde_json::Value>().await.ok()
+    } else {
+        None
+    };
+    
+    if let Some(release) = release {
+        let tag_name = release["tag_name"].as_str().unwrap_or("unknown");
+        let current_version = format!("v{}", env!("CARGO_PKG_VERSION"));
+        let current_version_stripped = env!("CARGO_PKG_VERSION");
+        
+        if tag_name != current_version && tag_name != current_version_stripped {
+            return Ok(Some(tag_name.to_string()));
+        }
+    }
+    Ok(None)
+}
+
+pub async fn run(servers_dir: &std::path::Path) -> Result<()> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen)?;
@@ -48,6 +80,18 @@ pub fn run(servers_dir: &std::path::Path) -> Result<()> {
     }
 
     draw_splash(&mut terminal)?;
+
+    // 업데이트 확인
+    if let Ok(Some(new_version)) = check_for_update().await {
+        let mut confirm_app = App::new(servers_dir.to_path_buf());
+        confirm_app.screen = Screen::Info(format!(
+            "새 버전(v{})이 있습니다. 업데이트하시겠습니까? (y/N)\n\n현재: v{}\n최신: {}\n\nEnter/y: 업데이트 진행\nEsc/n: 나중에",
+            new_version,
+            env!("CARGO_PKG_VERSION"),
+            new_version
+        ));
+        let _ = confirm_app.run(&mut terminal);
+    }
 
     let mut app = App::new(servers_dir.to_path_buf());
     let result = app.run(&mut terminal);
