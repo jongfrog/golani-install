@@ -81,6 +81,9 @@ New-Item -ItemType Directory -Path $GolaniHome -Force | Out-Null
 
 # 설치
 Write-Info "설치 중: $InstallDir\golani.exe"
+if (Test-Path "$InstallDir\golani.exe") {
+    Remove-Item -Path "$InstallDir\golani.exe" -Force -ErrorAction SilentlyContinue
+}
 Move-Item -Path $ExePath -Destination "$InstallDir\golani.exe" -Force
 
 # PATH 등록
