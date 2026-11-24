@@ -208,7 +208,7 @@ header h1 { color: #e94560; font-size: 1.5rem; }
 </div>
 <div class="wizard-content" id="wizardStep4">
 <div class="form-group">
-<label>RAM 할당 (MB)</label>
+<label>RAM 할당 (GB)</label>
 <input type="number" id="wizardRam" min="512" max="8192" value="2048">
 <small>시스템 RAM의 절반 권장, 최대 8GB</small>
 </div>
@@ -287,7 +287,7 @@ list.innerHTML = servers.map(s => `
 <div class="server-meta">
 <span class="status-badge ${s.running ? 'running' : 'stopped'}">${s.running ? '● 실행 중' : '○ 정지'}</span>
 <span>${s.kind} ${s.version}</span>
-<span>${s.ram_mb}MB</span>
+<span>${(s.ram_mb / 1024).toFixed(1)}GB</span>
 <span>:${s.port}</span>
 </div>
 </div>
@@ -315,7 +315,7 @@ const s = await res.json();
 document.getElementById('detailName').textContent = s.name;
 document.getElementById('detailMeta').innerHTML = `
 <span>${s.kind} ${s.version}</span>
-<span>${s.ram_mb}MB RAM</span>
+<span>${(s.ram_mb / 1024).toFixed(1)}GB RAM</span>
 <span>포트: ${s.port}</span>
 <span>Java ${s.java_version}</span>
 ${s.needs_restart ? '<span style="color:#fbbf24">↑ 재시작 필요</span>' : ''}
@@ -344,7 +344,7 @@ const formatTime = (ts) => ts ? new Date(ts * 1000).toLocaleString() : '-';
 grid.innerHTML = `
 <div class="info-card"><h4>서버 종류</h4><p>${s.kind}</p></div>
 <div class="info-card"><h4>마인크래프트 버전</h4><p>${s.version}${s.paper_build ? ' (빌드 ' + s.paper_build + ')' : ''}</p></div>
-<div class="info-card"><h4>RAM</h4><p>${s.ram_mb} MB</p></div>
+<div class="info-card"><h4>RAM</h4><p>${(s.ram_mb / 1024).toFixed(1)} GB</p></div>
 <div class="info-card"><h4>포트</h4><p>${s.port} (RCON: ${s.rcon_port})</p></div>
 <div class="info-card"><h4>Java 버전</h4><p>Java ${s.java_version}</p></div>
 <div class="info-card"><h4>생성일</h4><p>${formatTime(s.created_at)}</p></div>
@@ -557,7 +557,7 @@ case 3:
 return true;
 case 4:
 const ram = parseInt(document.getElementById('wizardRam').value);
-if (ram < 512 || ram > 8192) { showToast('RAM은 512~8192MB 사이여야 합니다', 'error'); return false; }
+        if (ram < 512 || ram > 8192) { showToast('RAM은 512~8192MB (0.5~8GB) 사이여야 합니다', 'error'); return false; }
 return true;
 case 5:
 const port = parseInt(document.getElementById('wizardPort').value);
@@ -581,7 +581,7 @@ document.getElementById('wizardConfirmContent').innerHTML = `
 <p><strong>종류:</strong> ${kindLabel}</p>
 <p><strong>버전:</strong> ${document.getElementById('wizardVersion').value}</p>
 <p><strong>위치:</strong> ${document.getElementById('wizardLocation').value} ${warn ? '<span style="color:#fbbf24"> ⚠ ' + warn + '</span>' : ''}</p>
-<p><strong>RAM:</strong> ${document.getElementById('wizardRam').value} MB</p>
+<p><strong>RAM:</strong> ${(document.getElementById('wizardRam').value / 1024).toFixed(1)} GB</p>
 <p><strong>포트:</strong> ${document.getElementById('wizardPort').value}</p>
 <p><strong>게임 모드:</strong> ${document.getElementById('wizardGameMode').value}</p>
 <p><strong>난이도:</strong> ${document.getElementById('wizardDifficulty').value}</p>
@@ -694,6 +694,16 @@ btn.addEventListener('click', () => switchTab(btn.dataset.tab));
 
 // Initialize
 loadServers();
+// Fetch default server and auto-select if specified
+fetch('/api/default-server')
+    .then(res => res.json())
+    .then(name => {
+        if (name) {
+            // Small delay to ensure servers are loaded
+            setTimeout(() => selectServer(name), 500);
+        }
+    })
+    .catch(() => {});
 setInterval(loadServers, 5000);
 </script>
 </body>

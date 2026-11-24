@@ -167,6 +167,10 @@ async fn try_download_vanilla_jar(version: &str, cache_dir: &Path) -> Result<Pat
 pub struct RunningServer {
     _lock: ServerLock,
     pub pid: u32,
+    #[cfg(windows)]
+    child: std::process::Child,
+    #[cfg(not(windows))]
+    child: Option<std::process::Child>,
 }
 
 pub fn load_metadata(server_dir: &Path) -> Result<ServerMetadata> {
@@ -265,36 +269,41 @@ pub async fn start(server_dir: &Path, java: &Path) -> Result<RunningServer> {
     ensure_vanilla_jar(&metadata.minecraft_version).await?;
     
     let lock = ServerLock::acquire(server_dir)?;
-    let log = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(server_dir.join("logs").join("latest.log"))?;
-    let log_error = log.try_clone()?;
+        let log = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(server_dir.join("logs").join("latest.log"))?;
+        let log_error = log.try_clone()?;
 
-    let mut cmd = Command::new(java);
-    cmd.current_dir(server_dir)
-        .args([
-            format!("-Xms{}M", metadata.ram_mb),
-            format!("-Xmx{}M", metadata.ram_mb),
-            "-jar".into(),
-            "server.jar".into(),
-            "nogui".into(),
-        ])
-        .stdout(Stdio::from(log))
-        .stderr(Stdio::from(log_error));
+        let mut cmd = Command::new(java);
+        cmd.current_dir(server_dir)
+            .args([
+                format!("-Xms{}M", metadata.ram_mb),
+                format!("-Xmx{}M", metadata.ram_mb),
+                "-jar".into(),
+                "server.jar".into(),
+                "nogui".into(),
+            ])
+            .stdout(Stdio::from(log))
+            .stderr(Stdio::from(log_error));
 
-    // Windows에서 완전 분리된 프로세스로 실행 (CLI 종료 후에도 서버 유지)
-    #[cfg(windows)]
-    {
-        const CREATE_NEW_PROCESS_GROUP: u32 = 0x00000200;
-        const DETACHED_PROCESS: u32 = 0x00000008;
-        cmd.creation_flags(CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS);
-    }
+        // Windows: 콘솔 창 없이 백그라운드 실행
+        #[cfg(windows)]
+        {
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            const CREATE_NEW_PROCESS_GROUP: u32 = 0x00000200;
+            const DETACHED_PROCESS: u32 = 0x00000008;
+            cmd.creation_flags(CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS);
+        }
 
-    let child = cmd.spawn()?;
-    let pid = child.id();
-    fs::write(pid_path(server_dir), format!("{pid}\n"))?;
-    Ok(RunningServer { _lock: lock, pid })
+        let child = cmd.spawn()?;
+        let pid = child.id();
+        fs::write(pid_path(server_dir), format!("{pid}\n"))?;
+
+        #[cfg(windows)]
+        return Ok(RunningServer { _lock: lock, pid, child });
+        #[cfg(not(windows))]
+        return Ok(RunningServer { _lock: lock, pid, child: Some(child) });
 }
 
 pub fn recorded_running_pid(server_dir: &Path) -> Option<u32> {

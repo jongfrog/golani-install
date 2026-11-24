@@ -24,6 +24,7 @@ use futures::StreamExt;
 pub struct WebState {
     pub servers_dir: PathBuf,
     pub java_dir: PathBuf,
+    pub default_server: Option<String>,
 }
 
 #[derive(Serialize, Clone)]
@@ -95,6 +96,7 @@ pub async fn serve(state: WebState) -> std::io::Result<()> {
         .route("/api/versions/vanilla", get(vanilla_versions))
         .route("/api/versions/paper", get(paper_versions))
         .route("/api/ports/next", get(next_available_port))
+        .route("/api/default-server", get(default_server))
         .with_state(Arc::new(state));
     
     let listener = tokio::net::TcpListener::bind("127.0.0.1:8788").await?;
@@ -109,6 +111,11 @@ async fn index() -> Html<&'static str> {
 // Console page
 async fn console_page(Path(name): Path<String>) -> Html<&'static str> {
     Html(include_str!("web/console.html"))
+}
+
+// Default server endpoint
+async fn default_server(State(state): State<Arc<WebState>>) -> Json<Option<String>> {
+    Json(state.default_server.clone())
 }
 
 // List servers

@@ -95,8 +95,7 @@ enum Screen {
     ServerMenu(usize),
     CreateWizard(WizardStep),
     Settings,
-    Logs(usize),
-    Console(usize),
+    ServerConsole(usize),
     Progress(String, f64),
     Error(String),
     ConfirmDelete(String),
@@ -197,10 +196,10 @@ struct App {
     kind_list_state: ListState,
     version_list_state: ListState,
     settings_list_state: ListState,
-    log_scroll: usize,
-    console_history: VecDeque<String>,
-    console_input: String,
-    console_history_idx: Option<usize>,
+    server_console_lines: VecDeque<String>,
+    server_console_input: String,
+    server_console_history_idx: Option<usize>,
+    server_console_follow: bool,
     last_tick: Instant,
     loading: bool,
     loading_msg: String,
@@ -231,10 +230,10 @@ impl App {
             kind_list_state: ListState::default(),
             version_list_state: ListState::default(),
             settings_list_state: ListState::default(),
-            log_scroll: 0,
-            console_history: VecDeque::with_capacity(100),
-            console_input: String::new(),
-            console_history_idx: None,
+            server_console_lines: VecDeque::with_capacity(5000),
+            server_console_input: String::new(),
+            server_console_history_idx: None,
+            server_console_follow: true,
             last_tick: Instant::now(),
             loading: false,
             loading_msg: String::new(),
@@ -259,8 +258,8 @@ impl App {
                 load_metadata(&path).ok().map(|meta| {
                     let running = recorded_running_pid(&path).is_some();
                     let detail = format!(
-                        "{:?} {} · {}MB · :{}",
-                        meta.kind, meta.minecraft_version, meta.ram_mb, meta.port
+                        "{:?} {} · {} · :{}",
+                        meta.kind, meta.minecraft_version, format_ram(meta.ram_mb), meta.port
                     );
                     ServerEntry { name: meta.name.clone(), detail, running, metadata: meta }
                 })
@@ -368,8 +367,7 @@ impl App {
             Screen::ServerMenu(idx) => self.handle_menu_key(key, *idx),
             Screen::CreateWizard(step) => self.handle_wizard_key(key, step.clone()),
             Screen::Settings => self.handle_settings_key(key),
-            Screen::Logs(idx) => self.handle_logs_key(key, *idx),
-            Screen::Console(idx) => self.handle_console_key(key, *idx),
+            Screen::ServerConsole(idx) => self.handle_server_console_key(key, *idx),
             Screen::Progress(_, _) => {
                 if matches!(key.code, KeyCode::Esc) {
                     self.loading = false;
@@ -560,7 +558,7 @@ impl App {
         match key.code {
             KeyCode::Esc => { self.screen = Screen::Main; }
             KeyCode::Down | KeyCode::Char('j') => {
-                let next = self.menu_list_state.selected().map_or(0, |i| (i + 1).min(8));
+                let next = self.menu_list_state.selected().map_or(0, |i| (i + 1).min(7));
                 self.menu_list_state.select(Some(next));
             }
             KeyCode::Up | KeyCode::Char('k') => {
@@ -572,13 +570,12 @@ impl App {
                     match sel {
                         0 => self.action_start_server(server),
                         1 => self.action_restart_server(server),
-                        2 => self.action_attach_console(server),
-                        3 => self.action_view_logs(server),
-                        4 => self.action_update_server(server),
-                        5 => self.action_rename_server(server),
-                        6 => self.action_edit_properties(server),
-                        7 => self.action_open_folder(server),
-                        8 => self.action_delete_server(server),
+                        2 => self.action_server_console(server),
+                        3 => self.action_update_server(server),
+                        4 => self.action_rename_server(server),
+                        5 => self.action_edit_properties(server),
+                        6 => self.action_open_folder(server),
+                        7 => self.action_delete_server(server),
                         _ => {}
                     }
                 }
@@ -670,19 +667,24 @@ impl App {
         });
     }
 
-    fn action_attach_console(&mut self, server: ServerEntry) {
-        self.console_history.clear();
-        self.console_input.clear();
-        self.console_history_idx = None;
-        if let Some(idx) = self.servers.iter().position(|s| s.name == server.name) {
-            self.screen = Screen::Console(idx);
+    fn action_server_console(&mut self, server: ServerEntry) {
+        self.server_console_lines.clear();
+        self.server_console_input.clear();
+        self.server_console_history_idx = None;
+        self.server_console_follow = true;
+        // 기존 로그 파일 내용 로드
+        let log_path = self.servers_dir.join(&server.name).join("logs").join("latest.log");
+        if let Ok(content) = fs::read_to_string(&log_path) {
+            for line in content.lines() {
+                self.server_console_lines.push_back(line.to_string());
+            }
+            // 최대 5000줄 유지
+            while self.server_console_lines.len() > 5000 {
+                self.server_console_lines.pop_front();
+            }
         }
-    }
-
-    fn action_view_logs(&mut self, server: ServerEntry) {
-        self.log_scroll = 0;
         if let Some(idx) = self.servers.iter().position(|s| s.name == server.name) {
-            self.screen = Screen::Logs(idx);
+            self.screen = Screen::ServerConsole(idx);
         }
     }
 
@@ -810,25 +812,7 @@ impl App {
         self.refresh_servers();
     }
 
-    fn handle_logs_key(&mut self, key: crossterm::event::KeyEvent, idx: usize) {
-        match key.code {
-            KeyCode::Esc => { 
-                if idx < self.servers.len() {
-                    self.menu_list_state.select(Some(0));
-                    self.screen = Screen::ServerMenu(idx);
-                } else {
-                    self.screen = Screen::Main;
-                }
-            }
-            KeyCode::Down | KeyCode::Char('j') => self.log_scroll = self.log_scroll.saturating_add(1),
-            KeyCode::Up | KeyCode::Char('k') => self.log_scroll = self.log_scroll.saturating_sub(1),
-            KeyCode::PageDown => self.log_scroll = self.log_scroll.saturating_add(20),
-            KeyCode::PageUp => self.log_scroll = self.log_scroll.saturating_sub(20),
-            _ => {}
-        }
-    }
-
-    fn handle_console_key(&mut self, key: crossterm::event::KeyEvent, idx: usize) {
+    fn handle_server_console_key(&mut self, key: crossterm::event::KeyEvent, idx: usize) {
         if idx >= self.servers.len() { return; }
         let server = &self.servers[idx];
         let (port, password) = match crate::server::rcon_settings(&self.servers_dir.join(&server.name)) {
@@ -845,10 +829,13 @@ impl App {
                     self.screen = Screen::Main;
                 }
             }
+            KeyCode::Char('f') => {
+                self.server_console_follow = !self.server_console_follow;
+            }
             KeyCode::Enter => {
-                if !self.console_input.trim().is_empty() {
-                    let cmd = self.console_input.trim().to_string();
-                    self.console_history.push_back(format!("> {}", cmd));
+                if !self.server_console_input.trim().is_empty() {
+                    let cmd = self.server_console_input.trim().to_string();
+                    self.server_console_lines.push_back(format!("> {}", cmd));
 
                     let password_clone = password.clone();
                     let port_clone = port;
@@ -856,30 +843,48 @@ impl App {
                         let _ = crate::rcon::command(&format!("127.0.0.1:{}", port_clone), &password_clone, &cmd).await;
                     });
 
-                    self.console_input.clear();
-                    self.console_history_idx = None;
+                    self.server_console_input.clear();
+                    self.server_console_history_idx = None;
                 }
             }
-            KeyCode::Backspace => { self.console_input.pop(); }
+            KeyCode::Backspace => { self.server_console_input.pop(); }
             KeyCode::Up => {
-                if !self.console_history.is_empty() {
-                    let idx = self.console_history_idx.map_or(self.console_history.len() - 1, |i| i.saturating_sub(1));
-                    self.console_history_idx = Some(idx);
-                    self.console_input = self.console_history[idx].trim_start_matches("> ").to_string();
-                }
-            }
-            KeyCode::Down => {
-                if let Some(idx) = self.console_history_idx {
-                    if idx + 1 < self.console_history.len() {
-                        self.console_history_idx = Some(idx + 1);
-                        self.console_input = self.console_history[idx + 1].trim_start_matches("> ").to_string();
-                    } else {
-                        self.console_history_idx = None;
-                        self.console_input.clear();
+                if !self.server_console_lines.is_empty() {
+                    let idx = self.server_console_history_idx.map_or(self.server_console_lines.len() - 1, |i| i.saturating_sub(1));
+                    self.server_console_history_idx = Some(idx);
+                    if let Some(line) = self.server_console_lines.get(idx) {
+                        if line.starts_with("> ") {
+                            self.server_console_input = line.trim_start_matches("> ").to_string();
+                        }
                     }
                 }
             }
-            KeyCode::Char(c) => { self.console_input.push(c); }
+            KeyCode::Down => {
+                if let Some(idx) = self.server_console_history_idx {
+                    if idx + 1 < self.server_console_lines.len() {
+                        self.server_console_history_idx = Some(idx + 1);
+                        if let Some(line) = self.server_console_lines.get(idx + 1) {
+                            if line.starts_with("> ") {
+                                self.server_console_input = line.trim_start_matches("> ").to_string();
+                            }
+                        }
+                    } else {
+                        self.server_console_history_idx = None;
+                        self.server_console_input.clear();
+                    }
+                }
+            }
+            KeyCode::PageUp => {
+                // 스크롤 업 - follow 모드 비활성화
+                self.server_console_follow = false;
+            }
+            KeyCode::PageDown => {
+                // 스크롤 다운 - 마지막이면 follow 모드 활성화
+                if self.server_console_history_idx.is_none() {
+                    self.server_console_follow = true;
+                }
+            }
+            KeyCode::Char(c) => { self.server_console_input.push(c); }
             _ => {}
         }
     }
@@ -1135,8 +1140,7 @@ impl App {
             Screen::ServerMenu(idx) => self.draw_server_menu(f, *idx),
             Screen::CreateWizard(step) => self.draw_wizard(f, step.clone()),
             Screen::Settings => self.draw_settings(f),
-            Screen::Logs(idx) => self.draw_logs(f, *idx),
-            Screen::Console(idx) => self.draw_console(f, *idx),
+            Screen::ServerConsole(idx) => self.draw_server_console(f, *idx),
             Screen::Progress(msg, progress) => self.draw_progress(f, msg, *progress),
             Screen::Error(msg) => self.draw_error(f, msg),
             Screen::ConfirmDelete(name) => self.draw_confirm_delete(f, name),
@@ -1240,8 +1244,7 @@ impl App {
         let menu_items = vec![
             if server.running { "  서버 중지  " } else { "  서버 시작  " },
             "  서버 재시작  ",
-            "  콘솔 연결  ",
-            "  로그 확인  ",
+            "  콘솔/로그  ",
             "  업데이트  ",
             "  이름 변경  ",
             "  속성 편집  ",
@@ -1360,11 +1363,13 @@ impl App {
     }
 
     fn draw_wizard_ram(&self) -> Paragraph {
-        let total_ram = sys_info::mem_info().map(|m| m.total / 1024).unwrap_or(8192);
-        let recommended = (total_ram / 2).min(8192);
+        let total_ram_mb = sys_info::mem_info().map(|m| m.total / 1024).unwrap_or(8192);
+        let total_ram_gb = total_ram_mb as f32 / 1024.0;
+        let recommended_mb = (total_ram_mb / 2).min(8192);
+        let recommended_gb = recommended_mb as f32 / 1024.0;
         Paragraph::new(format!(
-            "\n시스템 RAM: {}MB\n권장 상한: {}MB (최대 8GB)\n최소 권장: 2GB\n\n할당할 RAM: {}MB\n\n←/→: 512MB 감소/증가 | 위/아래: 512MB 조정 | Enter: 다음\n",
-            total_ram, recommended, self.wizard.ram_mb
+            "\n시스템 RAM: {:.1}GB\n권장 상한: {:.1}GB (최대 8GB)\n최소 권장: 2GB\n\n할당할 RAM: {:.1}GB\n\n←/→: 0.5GB 감소/증가 | 위/아래: 0.5GB 조정 | Enter: 다음\n",
+            total_ram_gb, recommended_gb, self.wizard.ram_mb as f32 / 1024.0
         ))
         .block(Block::default().borders(Borders::ALL).title(" 5/8: RAM 설정 ").border_style(Style::default().fg(Color::Cyan)))
         .wrap(Wrap { trim: true })
@@ -1394,9 +1399,9 @@ impl App {
 
     fn draw_wizard_confirm(&self) -> Paragraph {
         Paragraph::new(format!(
-            "\n다음 설정으로 서버를 생성합니다.\n\n이름: {}\n종류: {:?}\n버전: {}\n위치: {}\nRAM: {}MB\n포트: {}\n게임 모드: {}\n난이도: {}\n시드: {}\nMOTD: {}\n\nEnter로 생성 시작, ESC로 돌아가기\n",
+            "\n다음 설정으로 서버를 생성합니다.\n\n이름: {}\n종류: {:?}\n버전: {}\n위치: {}\nRAM: {:.1}GB\n포트: {}\n게임 모드: {}\n난이도: {}\n시드: {}\nMOTD: {}\n\nEnter로 생성 시작, ESC로 돌아가기\n",
             self.wizard.name, self.wizard.kind, self.wizard.version,
-            self.wizard.location.display(), self.wizard.ram_mb, self.wizard.port,
+            self.wizard.location.display(), self.wizard.ram_mb as f32 / 1024.0, self.wizard.port,
             self.wizard.game_mode, self.wizard.difficulty,
             self.wizard.seed.as_deref().unwrap_or("(랜덤)"), self.wizard.motd
         ))
@@ -1481,7 +1486,7 @@ impl App {
         f.render_widget(Clear, area);
 
         let (field_name, unit) = match self.get_edit_field_name() {
-            EditField::DefaultRam => ("기본 RAM", "MB"),
+            EditField::DefaultRam => ("기본 RAM", "GB"),
             EditField::WebUiPort => ("Web UI 포트", ""),
             _ => ("값", ""),
         };
@@ -1525,75 +1530,48 @@ impl App {
         }
     }
 
-    fn draw_logs(&mut self, f: &mut Frame, idx: usize) {
-        if idx >= self.servers.len() { return; }
-        let server = &self.servers[idx];
-        let log_path = self.servers_dir.join(&server.name).join("logs").join("latest.log");
-
-        let content = fs::read_to_string(&log_path).unwrap_or_else(|_| "로그 파일이 없습니다.".to_string());
-        let lines: Vec<&str> = content.lines().collect();
-        let start = self.log_scroll.min(lines.len().saturating_sub(1));
-        let end = (start + f.area().height as usize).min(lines.len());
-        let visible: Vec<Line> = lines[start..end].iter().map(|l| Line::from(*l)).collect();
-
-        let areas = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(5),
-                Constraint::Min(1),
-                Constraint::Length(4),
-            ])
-            .margin(1)
-            .split(f.area());
-
-        let header = Paragraph::new(format!(" {} - 로그 (줄: {}/{}) ", server.name, start + 1, lines.len()))
-            .block(Block::default().borders(Borders::ALL).title(" 로그 ").border_style(Style::default().fg(Color::Cyan)))
-            .style(Style::default().fg(Color::Cyan))
-            .alignment(Alignment::Center);
-        f.render_widget(header, areas[0]);
-
-        let log_widget = Paragraph::new(Text::from(visible))
-            .block(Block::default().borders(Borders::ALL).title(" 로그 내용 ").border_style(Style::default().fg(Color::DarkGray)))
-            .wrap(Wrap { trim: false })
-            .style(Style::default().fg(Color::White));
-        f.render_widget(log_widget, areas[1]);
-
-        let footer = Paragraph::new(" ↑/↓  스크롤    PageUp/PageDown    ESC  닫기 ")
-            .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::DarkGray)))
-            .alignment(Alignment::Center)
-            .style(Style::default().fg(Color::Gray));
-        f.render_widget(footer, areas[2]);
-    }
-
-    fn draw_console(&mut self, f: &mut Frame, idx: usize) {
+    fn draw_server_console(&mut self, f: &mut Frame, idx: usize) {
         if idx >= self.servers.len() { return; }
         let server = &self.servers[idx];
 
         let areas = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(5),
+                Constraint::Length(4),
                 Constraint::Min(1),
                 Constraint::Length(4),
             ])
             .margin(1)
             .split(f.area());
 
-        let header = Paragraph::new(format!(" {} - 콘솔 연결됨 (ESC로 분리, 서버 계속 실행) ", server.name))
-            .block(Block::default().borders(Borders::ALL).title(" 콘솔 ").border_style(Style::default().fg(Color::Green)))
+        let follow_indicator = if self.server_console_follow { " ● 실시간" } else { " ▮ 일시정지" };
+        let header = Paragraph::new(format!(" {} - 서버 콘솔{} (F:팔로우 토글, ESC:나가기) ", server.name, follow_indicator))
+            .block(Block::default().borders(Borders::ALL).title(" 콘솔/로그 ").border_style(Style::default().fg(Color::Green)))
             .style(Style::default().fg(Color::Green))
             .alignment(Alignment::Center);
         f.render_widget(header, areas[0]);
 
-        let history_text: Vec<Line> = self.console_history.iter().map(|l| Line::from(l.as_str())).collect();
-        let console_widget = Paragraph::new(Text::from(history_text))
+        // 보이는 줄 계산
+        let available_height = areas[1].height.saturating_sub(2) as usize; // borders
+        let lines: Vec<&str> = self.server_console_lines.iter().map(|s| s.as_str()).collect();
+        
+        let start = if self.server_console_follow || self.server_console_history_idx.is_none() {
+            lines.len().saturating_sub(available_height)
+        } else {
+            self.server_console_history_idx.unwrap_or(0).saturating_sub(available_height / 2)
+        };
+        
+        let end = (start + available_height).min(lines.len());
+        let visible: Vec<Line> = lines[start..end].iter().map(|l| Line::from(*l)).collect();
+
+        let console_widget = Paragraph::new(Text::from(visible))
             .block(Block::default().borders(Borders::ALL).title(" 출력 ").border_style(Style::default().fg(Color::DarkGray)))
             .wrap(Wrap { trim: false })
             .style(Style::default().fg(Color::White));
         f.render_widget(console_widget, areas[1]);
 
-        let footer = Paragraph::new(format!(" 명령: {}_ ", self.console_input))
-            .block(Block::default().borders(Borders::ALL).title(" 입력 (Enter 전송, ↑↓ 히스토리) ").border_style(Style::default().fg(Color::Yellow)))
+        let footer = Paragraph::new(format!(" 명령: {}_  (Enter:전송, ↑↓:히스토리, PgUp/PgDn:스크롤, F:실시간토글) ", self.server_console_input))
+            .block(Block::default().borders(Borders::ALL).title(" 입력 ").border_style(Style::default().fg(Color::Yellow)))
             .style(Style::default().fg(Color::Yellow));
         f.render_widget(footer, areas[2]);
     }
@@ -1662,8 +1640,8 @@ fn prev_step(step: WizardStep) -> WizardStep {
 }
 
 fn format_ram(mb: u32) -> String {
-    if mb >= 1024 && mb % 1024 == 0 {
-        format!("{}GB", mb / 1024)
+    if mb >= 1024 {
+        format!("{:.1}GB", mb as f32 / 1024.0)
     } else {
         format!("{}MB", mb)
     }

@@ -130,8 +130,8 @@ async fn handle_settings(
 async fn handle_self_update(_args: &[String]) -> golani::error::Result<()> {
     println!("golani 자체 업데이트를 확인합니다...");
     
-    const GITHUB_API: &str = "https://api.github.com/repos/nousresearch/golani/releases/latest";
-    const USER_AGENT: &str = "golani/0.1.0 (https://golani.kro.kr)";
+    const GITHUB_API: &str = "https://api.github.com/repos/jongfrog/golani-install/releases/latest";
+    const USER_AGENT: &str = "golani/0.1.3 (https://golani.kro.kr)";
     
     let client = reqwest::Client::builder()
         .user_agent(USER_AGENT)
@@ -139,31 +139,33 @@ async fn handle_self_update(_args: &[String]) -> golani::error::Result<()> {
     
     let response = client.get(GITHUB_API).send().await?;
     if !response.status().is_success() {
-        return Err(golani::error::Error::ServerCreation("GitHub API 요청 실패".into()));
+        return Err(golani::error::Error::ServerCreation(
+            format!("GitHub API 요청 실패: {}", response.status())
+        ));
     }
     
     let release: serde_json::Value = response.json().await?;
     let tag_name = release["tag_name"].as_str().unwrap_or("unknown");
     
     println!("최신 버전: {}", tag_name);
-    println!("현재 버전: 0.1.0");
+    println!("현재 버전: 0.1.3");
     
     // 버전 비교 (간단한 문자열 비교)
-    if tag_name == "v0.1.0" || tag_name == "0.1.0" {
+    if tag_name == "v0.1.3" || tag_name == "0.1.3" {
         println!("이미 최신 버전입니다.");
         return Ok(());
     }
     
     // 플랫폼별 자산 찾기
-    let os = if cfg!(windows) { "windows" } else if cfg!(target_os = "macos") { "macos" } else { "linux" };
-    let arch = if cfg!(target_arch = "aarch64") { "aarch64" } else { "x86_64" };
-    let asset_pattern = format!("golani-{}-{}", os, arch);
-    
-    let empty_vec: Vec<serde_json::Value> = Vec::new();
-    let assets = release["assets"].as_array().unwrap_or(&empty_vec);
-    let asset = assets.iter().find(|a| {
-        a["name"].as_str().unwrap_or("").contains(&asset_pattern)
-    });
+        let os = if cfg!(windows) { "windows" } else if cfg!(target_os = "macos") { "macos" } else { "linux" };
+        let arch = if cfg!(target_arch = "aarch64") { "arm64" } else { "x64" };
+        let asset_pattern = format!("golani-{}-{}", os, arch);
+
+        let empty_vec: Vec<serde_json::Value> = Vec::new();
+        let assets = release["assets"].as_array().unwrap_or(&empty_vec);
+        let asset = assets.iter().find(|a| {
+            a["name"].as_str().unwrap_or("").starts_with(&asset_pattern)
+        });
     
     let asset = match asset {
         Some(a) => a,
@@ -218,6 +220,10 @@ async fn handle_self_update(_args: &[String]) -> golani::error::Result<()> {
 }
 
 async fn run(arguments: Vec<String>) -> golani::error::Result<()> {
+    if arguments.first().map(String::as_str) == Some("help") || arguments.is_empty() {
+        print_help();
+        return Ok(());
+    }
     if arguments.first().map(String::as_str) == Some("versions") {
         let api = MinecraftApi::new()?;
         let versions = match arguments.get(1).map(String::as_str) {
@@ -358,10 +364,18 @@ async fn run(arguments: Vec<String>) -> golani::error::Result<()> {
                 return Ok(());
             }
             if arguments.first().map(String::as_str) == Some("web") {
-                println!("Web UI를 시작합니다: http://127.0.0.1:8788");
+                let name = arguments.get(1).ok_or_else(|| {
+                    golani::error::Error::ServerCreation("서버 이름이 필요합니다 (golani web <서버이름>)".into())
+                })?;
+                let server_dir = application.config.servers_dir.join(name);
+                if !server_dir.exists() {
+                    return Err(golani::error::Error::ServerCreation("서버를 찾을 수 없습니다".into()));
+                }
+                println!("Web UI를 시작합니다: http://127.0.0.1:8788 (서버: {})", name);
                 golani::web::serve(golani::web::WebState {
                     servers_dir: application.config.servers_dir.clone(),
                     java_dir: application.paths.java_dir(),
+                    default_server: Some(name.to_string()),
                 })
                 .await?;
                 return Ok(());
@@ -476,7 +490,7 @@ async fn run(arguments: Vec<String>) -> golani::error::Result<()> {
             }
             if arguments.first().map(String::as_str) == Some("new") {
                 if arguments.len() < 4 {
-                    eprintln!("사용법: golani new <vanilla|paper> <이름> <버전> [RAM_MB] [포트]");
+                    eprintln!("사용법: golani new <vanilla|paper> <이름> <버전> [RAM_GB] [포트]");
                     return Ok(());
                 }
                 let kind = match arguments[1].as_str() {
@@ -528,4 +542,40 @@ async fn run(arguments: Vec<String>) -> golani::error::Result<()> {
         Err(error) => return Err(error),
     }
     Ok(())
+}
+
+fn print_help() {
+    println!("golani - Minecraft Java Edition 서버 관리 도구");
+    println!();
+    println!("사용법: golani <명령어> [인자...]");
+    println!();
+    println!("명령어:");
+    println!("  help                    이 도움말 표시");
+    println!("  new <종류> <이름> <버전> [RAM_GB] [포트]  새 서버 생성");
+    println!("    종류: vanilla | paper");
+    println!("    예: golani new paper myserver 1.21.4 2048 25565");
+    println!("  start <이름>            서버 시작");
+    println!("  stop <이름>             서버 중지");
+    println!("  restart <이름>          서버 재시작");
+    println!("  status <이름>           서버 상태 확인");
+    println!("  logs <이름> [-f] [줄수]  로그 확인 ( -f: 실시간 팔로우 )");
+    println!("  console <이름>          RCON 콘솔 연결 (ESC로 분리)");
+    println!("  update <이름>           서버 업데이트 (자동 롤백)");
+    println!("  delete <이름> <확인어>  서버 삭제 (확인어: 삭제)");
+    println!("  rename <현재이름> <새이름>  서버 이름 변경");
+    println!("  web <이름>              해당 서버의 Web UI 시작");
+    println!("  java <버전>             Java 설치/확인 (기본: 1.21.1)");
+    println!("  versions <vanilla|paper>  사용 가능한 버전 목록");
+    println!("  settings                설정 보기/변경");
+    println!("    golani settings path <새_경로>   # 저장 위치 변경 (마이그레이션)");
+    println!("    golani settings java <경로>      # 수동 Java 경로 지정");
+    println!("    golani settings java --clear     # 수동 Java 경로 해제");
+    println!("  update                  golani 자체 업데이트");
+    println!("  (인자 없음)             TUI 실행");
+    println!();
+    println!("웹 UI (golani web <이름>):");
+    println!("  해당 서버의 대시보드, 실시간 로그, 콘솔, 설정 관리");
+    println!("  기본 포트: 8788 (설정에서 변경 가능)");
+    println!();
+    println!("자세한 정보: https://github.com/jongfrog/golani-install");
 }
