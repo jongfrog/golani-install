@@ -220,9 +220,12 @@ async fn handle_self_update(_args: &[String]) -> golani::error::Result<()> {
 }
 
 async fn run(arguments: Vec<String>) -> golani::error::Result<()> {
-    if arguments.first().map(String::as_str) == Some("help") || arguments.is_empty() {
+    if arguments.first().map(String::as_str) == Some("help") || arguments.iter().any(|a| a == "--help" || a == "-h") {
         print_help();
         return Ok(());
+    }
+    if arguments.is_empty() {
+        return golani::tui::run(&golani::paths::AppPaths::discover()?.root().join("servers"));
     }
     if arguments.first().map(String::as_str) == Some("versions") {
         let api = MinecraftApi::new()?;
