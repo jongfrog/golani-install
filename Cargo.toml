@@ -1,6 +1,6 @@
 [package]
 name = "golani"
-version = "0.1.9"
+version = "0.1.10"
 edition = "2021"
 description = "Minecraft Java Edition 서버 관리 도구"
 license = "MIT"
