@@ -131,7 +131,7 @@ async fn handle_self_update(_args: &[String]) -> golani::error::Result<()> {
     println!("golani 자체 업데이트를 확인합니다...");
     
     const GITHUB_API: &str = "https://api.github.com/repos/jongfrog/golani-install/releases/latest";
-    const USER_AGENT: &str = "golani/0.1.3 (https://golani.kro.kr)";
+    const USER_AGENT: &str = "golani/0.1.19 (https://golani.kro.kr)";
     
     let client = reqwest::Client::builder()
         .user_agent(USER_AGENT)
@@ -148,10 +148,10 @@ async fn handle_self_update(_args: &[String]) -> golani::error::Result<()> {
     let tag_name = release["tag_name"].as_str().unwrap_or("unknown");
     
     println!("최신 버전: {}", tag_name);
-    println!("현재 버전: 0.1.3");
+    println!("현재 버전: 0.1.19");
     
     // 버전 비교 (간단한 문자열 비교)
-    if tag_name == "v0.1.3" || tag_name == "0.1.3" {
+    if tag_name == "v0.1.19" || tag_name == "0.1.19" {
         println!("이미 최신 버전입니다.");
         return Ok(());
     }

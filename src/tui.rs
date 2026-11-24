@@ -101,6 +101,7 @@ enum Screen {
     ConfirmDelete(String),
     Info(String),
     QuitMenu,
+    ProgramManagement,
     EditPath {
         field: EditField,
         current: String,
@@ -367,6 +368,7 @@ impl App {
             Screen::ServerMenu(idx) => self.handle_menu_key(key, *idx),
             Screen::CreateWizard(step) => self.handle_wizard_key(key, step.clone()),
             Screen::Settings => self.handle_settings_key(key),
+            Screen::ProgramManagement => self.handle_program_management_key(key),
             Screen::ServerConsole(idx) => self.handle_server_console_key(key, *idx),
             Screen::Progress(_, _) => {
                 if matches!(key.code, KeyCode::Esc) {
@@ -379,13 +381,18 @@ impl App {
                     self.screen = Screen::Main;
                 }
             }
-            Screen::ConfirmDelete(name) => {
+            Screen::ConfirmDelete(msg) => {
                 if matches!(key.code, KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter) {
-                    let path = self.servers_dir.join(name);
-                    if let Err(e) = crate::server::delete(&path, "삭제") {
-                        self.screen = Screen::Error(format!("삭제 실패: {}", e));
+                    if msg.contains("golani 프로그램을 제거") {
+                        // 프로그램 제거: 설정/데이터 유지하고 실행파일만 삭제 안내
+                        self.screen = Screen::Info("golani 제거: `cargo uninstall golani` 또는 설치된 실행파일 수동 삭제\n(설정: ~/.golani, 데이터: ~/.golani/servers 유지)".to_string());
                     } else {
-                        self.screen = Screen::Main;
+                        let path = self.servers_dir.join(&msg);
+                        if let Err(e) = crate::server::delete(&path, "삭제") {
+                            self.screen = Screen::Error(format!("삭제 실패: {}", e));
+                        } else {
+                            self.screen = Screen::Main;
+                        }
                     }
                 } else if matches!(key.code, KeyCode::Esc | KeyCode::Char('n') | KeyCode::Char('N')) {
                     self.screen = Screen::Main;
@@ -738,14 +745,50 @@ impl App {
             KeyCode::Enter => {
                 if let Some(sel) = self.settings_list_state.selected() {
                     match sel {
-                        0 => self.edit_servers_dir(),
-                        1 => self.edit_java_path(),
-                        2 => self.edit_default_ram(),
-                        3 => self.toggle_web_ui(),
-                        4 => self.edit_web_ui_port(),
-                        5 => self.toggle_firewall(),
-                        6 => self.screen = Screen::Info("golani 자체 업데이트: `golani update` 명령 사용".to_string()),
-                        7 => self.screen = Screen::Info(format!("golani v{} - Minecraft 서버 관리 도구\n\nRust + ratatui + axum\nGitHub: https://github.com/jongfrog/golani-install", env!("CARGO_PKG_VERSION"))),
+                                            0 => self.edit_servers_dir(),
+                                            1 => self.edit_java_path(),
+                                            2 => self.edit_default_ram(),
+                                            3 => self.toggle_web_ui(),
+                                            4 => self.edit_web_ui_port(),
+                                            5 => self.toggle_firewall(),
+                                            6 => self.screen = Screen::ProgramManagement,
+                                            _ => {}
+                                        }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn handle_program_management_key(&mut self, key: crossterm::event::KeyEvent) {
+        match key.code {
+            KeyCode::Esc => { self.screen = Screen::Settings; }
+            KeyCode::Down | KeyCode::Char('j') => {
+                let next = self.menu_list_state.selected().map_or(0, |i| (i + 1).min(2));
+                self.menu_list_state.select(Some(next));
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                let next = self.menu_list_state.selected().map_or(0, |i| i.saturating_sub(1));
+                self.menu_list_state.select(Some(next));
+            }
+            KeyCode::Enter => {
+                if let Some(sel) = self.menu_list_state.selected() {
+                    match sel {
+                        0 => {
+                            // 프로그램 업데이트
+                            self.screen = Screen::Info("golani 자체 업데이트: `golani update` 명령 사용".to_string());
+                        }
+                        1 => {
+                            // 프로그램 정보
+                            self.screen = Screen::Info(format!(
+                                "golani v{} - Minecraft 서버 관리 도구\n\nRust + ratatui + axum\nGitHub: https://github.com/jongfrog/golani-install",
+                                env!("CARGO_PKG_VERSION")
+                            ));
+                        }
+                        2 => {
+                            // 프로그램 제거
+                            self.screen = Screen::ConfirmDelete("golani 프로그램을 제거하시겠습니까? (설정과 데이터는 유지됩니다)".to_string());
+                        }
                         _ => {}
                     }
                 }
@@ -1140,6 +1183,7 @@ impl App {
             Screen::ServerMenu(idx) => self.draw_server_menu(f, *idx),
             Screen::CreateWizard(step) => self.draw_wizard(f, step.clone()),
             Screen::Settings => self.draw_settings(f),
+            Screen::ProgramManagement => self.draw_program_management(f),
             Screen::ServerConsole(idx) => self.draw_server_console(f, *idx),
             Screen::Progress(msg, progress) => self.draw_progress(f, msg, *progress),
             Screen::Error(msg) => self.draw_error(f, msg),
@@ -1437,8 +1481,7 @@ impl App {
             format!("  4. Web UI: {}", if config.as_ref().map(|c| c.web_ui_enabled).unwrap_or(true) { "활성화" } else { "비활성화" }),
             format!("  5. Web UI 포트: {}", config.as_ref().map(|c| c.web_ui_port.to_string()).unwrap_or("8788".to_string())),
             format!("  6. 방화벽 자동 관리: {}", if config.as_ref().map(|c| c.firewall_managed).unwrap_or(true) { "활성화" } else { "비활성화" }),
-            "  7. 프로그램 업데이트".to_string(),
-            "  8. 프로그램 정보".to_string(),
+            "  7. 프로그램 관리".to_string(),
         ];
         let list_items: Vec<ListItem> = items.iter().enumerate().map(|(i, text)| {
             let style = if self.settings_list_state.selected() == Some(i) {
@@ -1454,6 +1497,48 @@ impl App {
         f.render_stateful_widget(list, areas[1], &mut self.settings_list_state);
 
         let footer = Paragraph::new(" ↑/↓  이동    Enter  선택/편집    ESC  뒤로가기 ")
+            .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::DarkGray)))
+            .alignment(Alignment::Center)
+            .style(Style::default().fg(Color::Gray));
+        f.render_widget(footer, areas[2]);
+    }
+
+    fn draw_program_management(&mut self, f: &mut Frame) {
+        let areas = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(5),
+                Constraint::Min(1),
+                Constraint::Length(4),
+            ])
+            .margin(1)
+            .split(f.area());
+
+        let header = Paragraph::new(" 프로그램 관리 ")
+            .block(Block::default().borders(Borders::ALL).title(" 프로그램 관리 ").border_style(Style::default().fg(Color::Green)))
+            .style(Style::default().fg(Color::Green).add_modifier(Modifier::BOLD))
+            .alignment(Alignment::Center);
+        f.render_widget(header, areas[0]);
+
+        let items = vec![
+            "  1. 프로그램 업데이트 (golani update)".to_string(),
+            "  2. 프로그램 정보".to_string(),
+            "  3. 프로그램 제거".to_string(),
+        ];
+        let list_items: Vec<ListItem> = items.iter().enumerate().map(|(i, text)| {
+            let style = if self.menu_list_state.selected() == Some(i) {
+                Style::default().bg(Color::Blue).fg(Color::White).add_modifier(Modifier::BOLD)
+            } else { Style::default().fg(Color::White) };
+            ListItem::new(Line::from(Span::styled(text.as_str(), style)))
+        }).collect();
+
+        let list = List::new(list_items)
+            .block(Block::default().borders(Borders::ALL).title(" 프로그램 관리 ").border_style(Style::default().fg(Color::DarkGray)))
+            .highlight_style(Style::default().bg(Color::Blue).fg(Color::White).add_modifier(Modifier::BOLD))
+            .highlight_symbol("► ");
+        f.render_stateful_widget(list, areas[1], &mut self.menu_list_state);
+
+        let footer = Paragraph::new(" ↑/↓  이동    Enter  선택    ESC  뒤로가기 ")
             .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::DarkGray)))
             .alignment(Alignment::Center)
             .style(Style::default().fg(Color::Gray));
