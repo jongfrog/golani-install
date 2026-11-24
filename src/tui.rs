@@ -30,6 +30,8 @@ use std::{
     collections::VecDeque,
 };
 use tokio::sync::mpsc;
+use reqwest;
+use serde_json;
 
 pub fn run(servers_dir: &std::path::Path) -> Result<()> {
     enable_raw_mode()?;
@@ -775,8 +777,49 @@ impl App {
                 if let Some(sel) = self.menu_list_state.selected() {
                     match sel {
                         0 => {
-                            // 프로그램 업데이트
-                            self.screen = Screen::Info("golani 자체 업데이트: `golani update` 명령 사용".to_string());
+                            // 프로그램 업데이트 - TUI에서 직접 업데이트 실행
+                            self.screen = Screen::Progress("업데이트 확인 중...".to_string(), 0.1);
+                            let (tx, rx) = mpsc::unbounded_channel();
+                            self.progress_receiver = Some(rx);
+                            tokio::spawn(async move {
+                                let _ = tx.send(("업데이트 확인 중...".to_string(), 0.1, ProgressAction::None));
+                                // golani update 로직 수행
+                                let client = reqwest::Client::builder()
+                                    .user_agent("golani/0.1.20 (https://golani.kro.kr)")
+                                    .build();
+                                let release = async {
+                                    if let Ok(client) = client {
+                                        let resp = client.get("https://api.github.com/repos/jongfrog/golani-install/releases/latest").send().await.ok()?;
+                                        let resp = resp.error_for_status().ok()?;
+                                        resp.json::<serde_json::Value>().await.ok()
+                                    } else {
+                                        None
+                                    }
+                                }.await;
+                                if let Some(release) = release {
+                                    let tag_name = release["tag_name"].as_str().unwrap_or("unknown");
+                                    if tag_name != "v0.1.20" && tag_name != "0.1.20" {
+                                        let os = if cfg!(windows) { "windows" } else if cfg!(target_os = "macos") { "macos" } else { "linux" };
+                                        let arch = if cfg!(target_arch = "aarch64") { "arm64" } else { "x64" };
+                                        let asset_name = format!("golani-{}-{}.zip", os, arch);
+                                        if let Some(asset) = release["assets"].as_array().and_then(|a| a.iter().find(|a| a["name"].as_str().unwrap_or("").contains(&format!("golani-{}-{}", os, arch)))) {
+                                            let download_url = asset["browser_download_url"].as_str().unwrap_or("");
+                                            let _ = tx.send(("다운로드 중...".to_string(), 0.5, ProgressAction::None));
+                                            if let Ok(resp) = reqwest::Client::new().get(download_url).send().await {
+                                                if let Ok(bytes) = resp.bytes().await {
+                                                    let current_exe = std::env::current_exe().unwrap();
+                                                    let temp_exe = current_exe.with_extension("exe.new");
+                                                    if std::fs::write(&temp_exe, &bytes).is_ok() {
+                                                        let _ = tx.send(("다운로드 완료! 수동 교체 필요".to_string(), 1.0, ProgressAction::None));
+                                                        return;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                let _ = tx.send(("업데이트 없음 또는 실패".to_string(), 1.0, ProgressAction::None));
+                            });
                         }
                         1 => {
                             // 프로그램 정보
