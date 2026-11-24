@@ -52,7 +52,8 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y musl-tools
 
-      - name: Build
+      - name: Build Windows
+        if: runner.os == 'Windows'
         run: |
           cargo clean
           echo "=== Rust version ===" && rustc --version
@@ -61,6 +62,16 @@ jobs:
           cargo build --release --target ${{ matrix.target }}
           echo "=== Binary size ===" && dir target\\${{ matrix.target }}\\release\\${{ matrix.binary }}
         shell: cmd
+
+      - name: Build Linux/macOS
+        if: runner.os != 'Windows'
+        run: |
+          cargo clean
+          echo "=== Rust version ===" && rustc --version
+          echo "=== Cargo version ===" && cargo --version
+          echo "=== Source verification ===" && head -5 src/main.rs
+          cargo build --release --target ${{ matrix.target }}
+          echo "=== Binary size ===" && ls -la target/${{ matrix.target }}/release/${{ matrix.binary }}
 
       - name: Upload binary
         uses: actions/upload-artifact@v4
