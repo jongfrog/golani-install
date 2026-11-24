@@ -55,7 +55,12 @@ jobs:
       - name: Build
         run: |
           cargo clean
+          echo "=== Rust version ===" && rustc --version
+          echo "=== Cargo version ===" && cargo --version
+          echo "=== Target ===" && rustc --print target-list | grep x86_64-pc-windows
+          echo "=== Source verification ===" && head -5 src/main.rs
           cargo build --release --target ${{ matrix.target }}
+          echo "=== Binary size ===" && ls -la target/${{ matrix.target }}/release/${{ matrix.binary }}
 
       - name: Upload binary
         uses: actions/upload-artifact@v4
