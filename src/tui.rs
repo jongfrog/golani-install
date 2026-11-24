@@ -386,17 +386,38 @@ impl App {
             Screen::ConfirmDelete(msg) => {
                 if matches!(key.code, KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter) {
                     if msg.contains("golani 프로그램을 제거") {
-                        // 프로그램 제거: 설치된 실행파일 삭제
+                        // 프로그램 제거: 실행파일 + 설정 + 데이터 모두 삭제
                         let install_dir = dirs::data_dir().unwrap_or_else(|| std::env::current_dir().unwrap()).join("golani");
                         let exe_path = install_dir.join("golani.exe");
-                        match std::fs::remove_file(&exe_path) {
-                            Ok(_) => {
-                                self.screen = Screen::Info("golani 실행파일이 제거되었습니다.\n(설정: ~/.golani, 데이터: ~/.golani/servers는 유지됩니다)".to_string());
-                            }
-                            Err(e) => {
-                                self.screen = Screen::Error(format!("제거 실패: {}", e));
+                        let mut removed_exe = false;
+                        let mut removed_dir = false;
+                        
+                        // 실행파일 삭제
+                        if exe_path.exists() {
+                            if std::fs::remove_file(&exe_path).is_ok() {
+                                removed_exe = true;
                             }
                         }
+                        
+                        // 설정/데이터 디렉토리 전체 삭제
+                        let golani_home = dirs::home_dir().unwrap_or_else(|| std::env::current_dir().unwrap()).join(".golani");
+                        if golani_home.exists() {
+                            if std::fs::remove_dir_all(&golani_home).is_ok() {
+                                removed_dir = true;
+                            }
+                        }
+                        
+                        let mut msg = String::new();
+                        if removed_exe {
+                            msg.push_str("golani 실행파일이 제거되었습니다.\\n");
+                        }
+                        if removed_dir {
+                            msg.push_str("설정 및 데이터(~/.golani)가 완전히 제거되었습니다.\\n");
+                        }
+                        if !removed_exe && !removed_dir {
+                            msg.push_str("제거할 파일이 없습니다.\\n");
+                        }
+                        self.screen = Screen::Info(msg);
                     } else {
                         let path = self.servers_dir.join(&msg);
                         if let Err(e) = crate::server::delete(&path, "삭제") {
