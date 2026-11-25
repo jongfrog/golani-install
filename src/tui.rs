@@ -55,10 +55,12 @@ pub async fn check_for_update() -> Result<Option<String>> {
     
     if let Some(release) = release {
         let tag_name = release["tag_name"].as_str().unwrap_or("unknown");
-        let current_version = format!("v{}", env!("CARGO_PKG_VERSION"));
         let current_version_stripped = env!("CARGO_PKG_VERSION");
         
-        if tag_name != current_version && tag_name != current_version_stripped {
+        // Compare without 'v' prefix
+        let tag_stripped = tag_name.strip_prefix('v').unwrap_or(tag_name);
+        
+        if tag_stripped != current_version_stripped {
             return Ok(Some(tag_name.to_string()));
         }
     }
@@ -616,8 +618,7 @@ impl App {
         let total = self.get_total_items();
         match key.code {
             KeyCode::Esc => {
-                self.menu_list_state.select(Some(0));
-                self.screen = Screen::QuitMenu;
+                self.should_quit = true;
             }
             KeyCode::Down | KeyCode::Char('j') => {
                 let next = self.main_list_state.selected().map_or(0, |i| (i + 1).min(total - 1));
