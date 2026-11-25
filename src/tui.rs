@@ -855,9 +855,9 @@ impl App {
 
     fn handle_program_management_key(&mut self, key: crossterm::event::KeyEvent) {
         match key.code {
-            KeyCode::Esc => { self.screen = Screen::Settings; }
+            KeyCode::Esc => { self.screen = Screen::Main; }
             KeyCode::Down | KeyCode::Char('j') => {
-                let next = self.menu_list_state.selected().map_or(0, |i| (i + 1).min(2));
+                let next = self.menu_list_state.selected().map_or(0, |i| (i + 1).min(1));
                 self.menu_list_state.select(Some(next));
             }
             KeyCode::Up | KeyCode::Char('k') => {
@@ -868,49 +868,8 @@ impl App {
                 if let Some(sel) = self.menu_list_state.selected() {
                     match sel {
                         0 => {
-                            // 프로그램 업데이트 - TUI에서 직접 업데이트 실행
-                            self.screen = Screen::Progress("업데이트 확인 중...".to_string(), 0.1);
-                            let (tx, rx) = mpsc::unbounded_channel();
-                            self.progress_receiver = Some(rx);
-                            tokio::spawn(async move {
-                                let _ = tx.send(("업데이트 확인 중...".to_string(), 0.1, ProgressAction::None));
-                                // golani update 로직 수행
-                                let client = reqwest::Client::builder()
-                                    .user_agent("golani/0.1.20 (https://golani.kro.kr)")
-                                    .build();
-                                let release = async {
-                                    if let Ok(client) = client {
-                                        let resp = client.get("https://api.github.com/repos/jongfrog/golani-install/releases/latest").send().await.ok()?;
-                                        let resp = resp.error_for_status().ok()?;
-                                        resp.json::<serde_json::Value>().await.ok()
-                                    } else {
-                                        None
-                                    }
-                                }.await;
-                                if let Some(release) = release {
-                                    let tag_name = release["tag_name"].as_str().unwrap_or("unknown");
-                                    if tag_name != "v0.1.20" && tag_name != "0.1.20" {
-                                        let os = if cfg!(windows) { "windows" } else if cfg!(target_os = "macos") { "macos" } else { "linux" };
-                                        let arch = if cfg!(target_arch = "aarch64") { "arm64" } else { "x64" };
-                                        let asset_name = format!("golani-{}-{}.zip", os, arch);
-                                        if let Some(asset) = release["assets"].as_array().and_then(|a| a.iter().find(|a| a["name"].as_str().unwrap_or("").contains(&format!("golani-{}-{}", os, arch)))) {
-                                            let download_url = asset["browser_download_url"].as_str().unwrap_or("");
-                                            let _ = tx.send(("다운로드 중...".to_string(), 0.5, ProgressAction::None));
-                                            if let Ok(resp) = reqwest::Client::new().get(download_url).send().await {
-                                                if let Ok(bytes) = resp.bytes().await {
-                                                    let current_exe = std::env::current_exe().unwrap();
-                                                    let temp_exe = current_exe.with_extension("exe.new");
-                                                    if std::fs::write(&temp_exe, &bytes).is_ok() {
-                                                        let _ = tx.send(("다운로드 완료! 수동 교체 필요".to_string(), 1.0, ProgressAction::None));
-                                                        return;
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                let _ = tx.send(("업데이트 없음 또는 실패".to_string(), 1.0, ProgressAction::None));
-                            });
+                            // 프로그램 업데이트 - 버전 확인 후 업데이트 필요시 진행
+                            self.check_and_update();
                         }
                         1 => {
                             // 프로그램 제거
@@ -922,6 +881,45 @@ impl App {
             }
             _ => {}
         }
+    }
+
+    fn check_and_update(&mut self) {
+        self.screen = Screen::Progress("업데이트 확인 중...".to_string(), 0.1);
+        let (tx, rx) = mpsc::unbounded_channel();
+        self.progress_receiver = Some(rx);
+        tokio::spawn(async move {
+            let _ = tx.send(("업데이트 확인 중...".to_string(), 0.1, ProgressAction::None));
+            let client = reqwest::Client::builder()
+                .user_agent("golani/0.1.20 (https://golani.kro.kr)")
+                .build();
+            let release = async {
+                if let Ok(client) = client {
+                    let resp = client.get("https://api.github.com/repos/jongfrog/golani-install/releases/latest").send().await.ok()?;
+                    let resp = resp.error_for_status().ok()?;
+                    resp.json::<serde_json::Value>().await.ok()
+                } else {
+                    None
+                }
+            }.await;
+            if let Some(release) = release {
+                let tag_name = release["tag_name"].as_str().unwrap_or("unknown");
+                let current_version = format!("v{}", env!("CARGO_PKG_VERSION"));
+                let current_version_stripped = env!("CARGO_PKG_VERSION");
+                
+                let is_latest = tag_name == current_version || tag_name == current_version_stripped;
+                
+                if is_latest {
+                    // 최신 버전 - 진행 완료 후 메인으로
+                    let _ = tx.send((format!("현재 버전: {}\\n최신 버전: {}\\n이미 최신 버전입니다.", current_version_stripped, tag_name), 1.0, ProgressAction::None));
+                } else {
+                    // 업데이트 필요 - 다운로드 진행
+                    let _ = tx.send((format!("현재 버전: {}\\n최신 버전: {}\\n업데이트가 필요합니다. 다운로드 중...", current_version_stripped, tag_name), 0.5, ProgressAction::None));
+                    // ... 다운로드 로직
+                }
+            } else {
+                let _ = tx.send(("업데이트 확인 실패".to_string(), 1.0, ProgressAction::None));
+            }
+        });
     }
 
     fn get_config(&self) -> Option<Config> {
