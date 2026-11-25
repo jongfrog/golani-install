@@ -86,11 +86,13 @@ pub async fn run(servers_dir: &std::path::Path) -> Result<()> {
     // 업데이트 확인
     if let Ok(Some(new_version)) = check_for_update().await {
         let mut confirm_app = App::new(servers_dir.to_path_buf());
+        // new_version already has 'v' prefix from GitHub tag, strip it for display
+        let new_version_display = new_version.strip_prefix('v').unwrap_or(&new_version);
         confirm_app.screen = Screen::Info(format!(
-            "새 버전(v{})이 있습니다. 업데이트하시겠습니까? (y/N)\n\n현재: v{}\n최신: {}\n\nEnter/y: 업데이트 진행\nEsc/n: 나중에",
-            new_version,
+            "새 버전(v{})이 있습니다. 업데이트하시겠습니까? (y/N)\n\n현재: v{}\n최신: v{}\n\nEnter/y: 업데이트 진행\nEsc/n: 나중에",
+            new_version_display,
             env!("CARGO_PKG_VERSION"),
-            new_version
+            new_version_display
         ));
         let _ = confirm_app.run(&mut terminal);
     }
