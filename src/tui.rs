@@ -620,7 +620,8 @@ impl App {
         let total = self.get_total_items();
         match key.code {
             KeyCode::Esc => {
-                self.should_quit = true;
+                self.menu_list_state.select(Some(0));
+                self.screen = Screen::QuitMenu;
             }
             KeyCode::Down | KeyCode::Char('j') => {
                 let next = self.main_list_state.selected().map_or(0, |i| (i + 1).min(total - 1));
