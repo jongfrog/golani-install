@@ -27,10 +27,24 @@ const VANILLA_MANIFEST: &str = "https://piston-meta.mojang.com/mc/game/version_m
 const USER_AGENT: &str = "golani/0.1.0 (https://golani.kro.kr)";
 
 fn get_paperclip_cache_dir() -> PathBuf {
-    if let Some(home) = env::var_os("HOME") {
-        PathBuf::from(home).join(".paperclip")
-    } else if let Some(appdata) = env::var_os("APPDATA") {
+    // Paperclip uses APPDATA\Paperclip on Windows, HOME/.paperclip on Unix
+    #[cfg(windows)]
+    {
+        if let Some(appdata) = env::var_os("APPDATA") {
+            return PathBuf::from(appdata).join("Paperclip");
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        if let Some(home) = env::var_os("HOME") {
+            return PathBuf::from(home).join(".paperclip");
+        }
+    }
+    // Fallback
+    if let Some(appdata) = env::var_os("APPDATA") {
         PathBuf::from(appdata).join("Paperclip")
+    } else if let Some(home) = env::var_os("HOME") {
+        PathBuf::from(home).join(".paperclip")
     } else {
         PathBuf::from(".").join(".paperclip")
     }
@@ -41,46 +55,57 @@ async fn ensure_vanilla_jar(version: &str) -> Result<PathBuf> {
     let vanilla_jar = cache_dir.join(format!("{version}.jar"));
 
     if vanilla_jar.exists() {
+        eprintln!("[DEBUG] Vanilla JAR already exists at: {}", vanilla_jar.display());
         return Ok(vanilla_jar);
     }
 
     fs::create_dir_all(&cache_dir)?;
 
-    // Try to download with retries
-    let max_retries = 3;
+    // Try to download with retries - more aggressive
+    let max_retries = 5;
     let mut last_error = None;
 
     for attempt in 1..=max_retries {
+        eprintln!("[DEBUG] Attempting to download vanilla JAR for {version} (attempt {attempt}/{max_retries})");
         match try_download_vanilla_jar(version, &cache_dir).await {
-            Ok(path) => return Ok(path),
+            Ok(path) => {
+                eprintln!("[DEBUG] Successfully downloaded vanilla JAR to: {}", path.display());
+                return Ok(path);
+            }
             Err(e) => {
                 last_error = Some(e);
+                eprintln!("[WARN] Vanilla JAR download attempt {attempt}/{max_retries} failed: {:?}. Retrying in {}s...", last_error, attempt * 3);
                 if attempt < max_retries {
-                    tokio::time::sleep(Duration::from_secs(2 * attempt)).await;
+                    tokio::time::sleep(Duration::from_secs(attempt * 3)).await;
                 }
             }
         }
     }
 
     // If download fails but we have a cached vanilla JAR from another version, try to use that
+    eprintln!("[DEBUG] Checking for fallback JARs in cache: {}", cache_dir.display());
     if let Ok(entries) = fs::read_dir(&cache_dir) {
         for entry in entries.flatten() {
             if entry.path().extension().map_or(false, |e| e == "jar") {
-                let dest = cache_dir.join(format!("{}.jar", version));
+                let dest = cache_dir.join(format!("{version}.jar"));
+                eprintln!("[DEBUG] Found fallback JAR: {}, copying to: {}", entry.path().display(), dest.display());
                 if fs::copy(entry.path(), &dest).is_ok() {
+                    eprintln!("[DEBUG] Successfully copied fallback JAR");
                     return Ok(dest);
                 }
             }
         }
     }
 
-    // Network failed - log warning and continue, let Paperclip try its own download
-    eprintln!("[WARN] Failed to pre-download vanilla JAR for {version}: {}. Paperclip will attempt its own download.", 
-        last_error.as_ref().map(|e| e.to_string()).unwrap_or_else(|| "unknown error".to_string()));
-    eprintln!("[WARN] If Paperclip fails with SSL errors, manually place the vanilla {version}.jar in {}.", get_paperclip_cache_dir().display());
-
-    // Return a dummy path - the actual start will proceed and Paperclip will try to download
-    Ok(vanilla_jar)
+    // Network failed - return error instead of dummy path
+    Err(Error::ServerCreation(format!(
+        "Failed to download vanilla JAR for {} after {} attempts: {}. Please check your internet connection or manually place the vanilla {}.jar in {}.",
+        version,
+        max_retries,
+        last_error.as_ref().map(|e| e.to_string()).unwrap_or_else(|| "unknown error".to_string()),
+        version,
+        get_paperclip_cache_dir().display()
+    )))
 }
 
 async fn try_download_vanilla_jar(version: &str, cache_dir: &Path) -> Result<PathBuf> {
@@ -153,16 +178,19 @@ async fn try_download_vanilla_jar(version: &str, cache_dir: &Path) -> Result<Pat
     let bytes = response.bytes().await?;
 
     // Verify SHA1
-    let actual_sha1 = hex::encode(Sha1::digest(&bytes));
-    if !actual_sha1.eq_ignore_ascii_case(expected_sha1) {
-        return Err(Error::Verification("Vanilla JAR SHA1 mismatch".into()));
+        let actual_sha1 = hex::encode(Sha1::digest(&bytes));
+        if !actual_sha1.eq_ignore_ascii_case(expected_sha1) {
+            return Err(Error::Verification("Vanilla JAR SHA1 mismatch".into()));
+        }
+
+        // Save with both naming conventions for Paperclip compatibility
+        let vanilla_jar_path = cache_dir.join(format!("{version}.jar"));
+        let mojang_jar_path = cache_dir.join(format!("mojang_{version}.jar"));
+        fs::write(&vanilla_jar_path, &bytes)?;
+        fs::write(&mojang_jar_path, &bytes)?;
+
+        Ok(vanilla_jar_path)
     }
-
-    let vanilla_jar_path = cache_dir.join(format!("{version}.jar"));
-    fs::write(&vanilla_jar_path, &bytes)?;
-
-    Ok(vanilla_jar_path)
-}
 
 pub struct RunningServer {
     _lock: ServerLock,
@@ -276,16 +304,19 @@ pub async fn start(server_dir: &Path, java: &Path) -> Result<RunningServer> {
         let log_error = log.try_clone()?;
 
         let mut cmd = Command::new(java);
-        cmd.current_dir(server_dir)
-            .args([
-                format!("-Xms{}M", metadata.ram_mb),
-                format!("-Xmx{}M", metadata.ram_mb),
-                "-jar".into(),
-                "server.jar".into(),
-                "nogui".into(),
-            ])
-            .stdout(Stdio::from(log))
-            .stderr(Stdio::from(log_error));
+                cmd.current_dir(server_dir)
+                    .args([
+                        format!("-Xms{}M", metadata.ram_mb),
+                        format!("-Xmx{}M", metadata.ram_mb),
+                        "-Dpaperclip.disableUpdateCheck=true".into(),
+                        "-Dpaperclip.fallback.disable=true".into(),
+                        "-Djava.net.preferIPv4Stack=true".into(),
+                        "-jar".into(),
+                        "server.jar".into(),
+                        "nogui".into(),
+                    ])
+                    .stdout(Stdio::from(log))
+                    .stderr(Stdio::from(log_error));
 
         // Windows: 콘솔 창 없이 백그라운드 실행
         #[cfg(windows)]

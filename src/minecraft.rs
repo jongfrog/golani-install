@@ -160,7 +160,8 @@ impl MinecraftApi {
                 Error::ServerCreation("사용 가능한 안정 Paper 빌드가 없습니다".into())
             })?;
         let download = build["downloads"]
-            .get("server:default")
+            .get("application:default")
+            .or_else(|| build["downloads"].get("server:default"))
             .or_else(|| {
                 build["downloads"]
                     .get("server")

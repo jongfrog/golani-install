@@ -83,10 +83,9 @@ pub async fn run(servers_dir: &std::path::Path) -> Result<()> {
 
     draw_splash(&mut terminal)?;
 
-    // 업데이트 확인
+    // 업데이트 확인 (최신 버전이 아닐 때만 프롬프트 표시)
     if let Ok(Some(new_version)) = check_for_update().await {
         let mut confirm_app = App::new(servers_dir.to_path_buf());
-        // new_version already has 'v' prefix from GitHub tag, strip it for display
         let new_version_display = new_version.strip_prefix('v').unwrap_or(&new_version);
         confirm_app.screen = Screen::Info(format!(
             "새 버전(v{})이 있습니다. 업데이트하시겠습니까? (y/N)\n\n현재: v{}\n최신: v{}\n\nEnter/y: 업데이트 진행\nEsc/n: 나중에",
@@ -493,7 +492,7 @@ impl App {
                 }
             }
             Screen::Info(_) => {
-                if matches!(key.code, KeyCode::Esc | KeyCode::Enter) {
+                if matches!(key.code, KeyCode::Esc | KeyCode::Enter | KeyCode::Char('n') | KeyCode::Char('N')) {
                     self.screen = Screen::Main;
                 }
             }
@@ -620,8 +619,7 @@ impl App {
         let total = self.get_total_items();
         match key.code {
             KeyCode::Esc => {
-                self.menu_list_state.select(Some(0));
-                self.screen = Screen::QuitMenu;
+                self.should_quit = true;
             }
             KeyCode::Down | KeyCode::Char('j') => {
                 let next = self.main_list_state.selected().map_or(0, |i| (i + 1).min(total - 1));
